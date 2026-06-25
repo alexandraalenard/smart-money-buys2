@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export default function Home() {
-  const [rankings, setRankings] = useState([])
+  const [rankings, setRankings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
