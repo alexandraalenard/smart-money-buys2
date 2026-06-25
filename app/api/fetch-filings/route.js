@@ -6,72 +6,65 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-const SEC_HEADERS = {
-  'User-Agent': 'SmartMoneyBuys contact@smartmoneybuys.com',
-}
+const SEC_UA = { 'User-Agent': 'SmartMoneyBuys contact@smartmoneybuys.com' }
 
-async function getForm4Filings(cik) {
+async function fetchForm4sForTicker(ticker) {
   try {
-    const res = await fetch(
-      `https://data.sec.gov/submissions/CIK${cik}.json`,
-      { headers: SEC_HEADERS }
-    )
+    // Use EDGAR full text search to find Form 4 filings
+    const url = `https://efts.sec.gov/LATEST/search-index?q=%22${ticker}%22&forms=4&dateRange=custom&startdt=2024-01-01`
+    const res = await fetch(url, { headers: SEC_UA })
     if (!res.ok) return []
     const data = await res.json()
-    const filings = data.filings?.recent
-    if (!filings) return []
-    const form4s = []
-    for (let i = 0; i < filings.form.length; i++) {
-      if (filings.form[i] === '4' || filings.form[i] === '4/A') {
-        form4s.push({
-          accessionNumber: filings.accessionNumber[i],
-          filingDate: filings.filingDate[i],
-        })
-        if (form4s.length >= 15) break
-      }
-    }
-    return form4s
+    return (data.hits?.hits || []).slice(0, 10)
   } catch (e) {
     return []
   }
 }
 
-async function parseForm4(cik, accessionNumber) {
+async function getFilingXML(accessionNo, cik) {
   try {
-    const accNoClean = accessionNumber.replace(/-/g, '')
-    const xmlUrl = `https://www.sec.gov/Archives/edgar/data/${parseInt(cik)}/${accNoClean}.txt`
-    const res = await fetch(xmlUrl, { headers: SEC_HEADERS })
-    if (!res.ok) return null
-    const text = await res.text()
+    const acc = accessionNo.replace(/-/g, '')
+    const cikInt = parseInt(cik)
+    const xmlUrl = `https://www.sec.gov/Archives/edgar/data/${cikInt}/${acc}/${accessionNo}.xml`
+    const res = await fetch(xmlUrl, { headers: SEC_UA })
+    if (res.ok) return await res.text()
 
-    const getName = (tag) => {
-      const match = text.match(new RegExp(`<${tag}[^>]*>([^<]+)<\/${tag}>`, 'i'))
-      return match ? match[1].trim() : null
-    }
+    // Try .txt fallback
+    const txtUrl = `https://www.sec.gov/Archives/edgar/data/${cikInt}/${acc}.txt`
+    const res2 = await fetch(txtUrl, { headers: SEC_UA })
+    if (res2.ok) return await res2.text()
 
-    const rptOwnerName = getName('rptOwnerName')
-    const officerTitle = getName('officerTitle') || 'Director'
-    const transactionShares = text.match(/<transactionShares>[\s\S]*?<value>([\d.]+)<\/value>/)?.[1]
-    const transactionPrice = text.match(/<transactionPricePerShare>[\s\S]*?<value>([\d.]+)<\/value>/)?.[1]
-    const transactionCode = text.match(/<transactionCode>([A-Z])<\/transactionCode>/)?.[1]
-    const transactionDate = text.match(/<transactionDate>[\s\S]*?<value>([\d-]+)<\/value>/)?.[1]
+    return null
+  } catch (e) {
+    return null
+  }
+}
 
-    if (!rptOwnerName || !transactionShares) return null
+function extractTradeFromXML(text, accessionNo) {
+  try {
+    const ownerName = text.match(/<rptOwnerName>([^<]+)<\/rptOwnerName>/)?.[1]?.trim()
+    const title = text.match(/<officerTitle>([^<]+)<\/officerTitle>/)?.[1]?.trim() || 'Director'
+    const shares = text.match(/<transactionShares>[\s\S]*?<value>([\d.]+)<\/value>/)?.[1]
+    const price = text.match(/<transactionPricePerShare>[\s\S]*?<value>([\d.]+)<\/value>/)?.[1]
+    const code = text.match(/<transactionCode>([A-Z])<\/transactionCode>/)?.[1]
+    const date = text.match(/<transactionDate>[\s\S]*?<value>([\d-]+)<\/value>/)?.[1]
 
-    const shares = parseFloat(transactionShares)
-    const price = parseFloat(transactionPrice || '0')
-    const type = transactionCode === 'P' ? 'BUY' : transactionCode === 'S' ? 'SELL' : null
-    if (!type || shares <= 0) return null
+    if (!ownerName || !shares || !date) return null
+
+    const sharesNum = parseFloat(shares)
+    const priceNum = parseFloat(price || '0')
+    const type = code === 'P' ? 'BUY' : code === 'S' ? 'SELL' : null
+    if (!type || sharesNum <= 0) return null
 
     return {
-      insider_name: rptOwnerName,
-      insider_title: officerTitle,
+      insider_name: ownerName,
+      insider_title: title,
       transaction_type: type,
-      shares: Math.round(shares),
-      price_per_share: price,
-      total_value: Math.round(shares * price),
-      transaction_date: transactionDate,
-      source: `SEC Form 4 · ${accessionNumber}`,
+      shares: Math.round(sharesNum),
+      price_per_share: priceNum,
+      total_value: Math.round(sharesNum * priceNum),
+      transaction_date: date,
+      source: `SEC Form 4 · ${accessionNo}`,
       source_type: 'SEC_FORM4',
     }
   } catch (e) {
@@ -81,7 +74,7 @@ async function parseForm4(cik, accessionNumber) {
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url)
-  const limit = parseInt(searchParams.get('limit') || '20')
+  const limit = parseInt(searchParams.get('limit') || '10')
   const offset = parseInt(searchParams.get('offset') || '0')
 
   try {
@@ -91,12 +84,10 @@ export async function GET(request) {
       .range(offset, offset + limit - 1)
       .order('ticker')
 
-    let tickerMap = {}
-    const tickerRes = await fetch(
-      'https://www.sec.gov/files/company_tickers.json',
-      { headers: SEC_HEADERS }
-    )
+    // Load CIK map
+    const tickerRes = await fetch('https://www.sec.gov/files/company_tickers.json', { headers: SEC_UA })
     const tickerData = await tickerRes.json()
+    const tickerMap = {}
     for (const key of Object.keys(tickerData)) {
       tickerMap[tickerData[key].ticker] = String(tickerData[key].cik_str).padStart(10, '0')
     }
@@ -108,34 +99,18 @@ export async function GET(request) {
       const cik = tickerMap[company.ticker]
       if (!cik) { results.push({ ticker: company.ticker, status: 'no_cik' }); continue }
 
-      const filings = await getForm4Filings(cik)
-      let newTrades = 0
+      try {
+        // Get recent Form 4 filings from submissions API
+        const subRes = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers: SEC_UA })
+        if (!subRes.ok) { results.push({ ticker: company.ticker, status: 'no_submissions' }); continue }
+        
+        const subData = await subRes.json()
+        const recent = subData.filings?.recent
+        if (!recent) { results.push({ ticker: company.ticker, status: 'no_filings' }); continue }
 
-      for (const filing of filings.slice(0, 8)) {
-        const trade = await parseForm4(cik, filing.accessionNumber)
-        if (!trade) continue
-
-        const { data: existing } = await supabase
-          .from('trades').select('id')
-          .eq('company_id', company.id)
-          .eq('transaction_date', trade.transaction_date)
-          .eq('insider_name', trade.insider_name)
-          .single()
-
-        if (!existing) {
-          await supabase.from('trades').insert({ ...trade, company_id: company.id })
-          newTrades++
-        }
-        await new Promise(r => setTimeout(r, 150))
-      }
-
-      totalNewTrades += newTrades
-      results.push({ ticker: company.ticker, status: 'ok', trades: newTrades })
-      await new Promise(r => setTimeout(r, 200))
-    }
-
-    return NextResponse.json({ success: true, processed: companies.length, totalNewTrades, results })
-  } catch (err) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 })
-  }
-}
+        // Find Form 4 filings
+        const form4s = []
+        for (let i = 0; i < recent.form.length; i++) {
+          if (recent.form[i] === '4') {
+            form4s.push({
+              accession: recent.accessionNumber[i],
