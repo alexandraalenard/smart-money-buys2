@@ -76,10 +76,14 @@ export async function GET(request) {
         const company = companyMap[ticker]
         if (!company) continue
 
-        // Find the wk-form4 XML file specifically
+        // Prefer raw form4.xml over stylesheet version
         const xmlUrl = filing.documentFormatFiles?.find(f =>
-          f.documentUrl?.includes('wk-form4')
-        )?.documentUrl || filing.documentFormatFiles?.[1]?.documentUrl
+          f.documentUrl?.endsWith('form4.xml') || f.documentUrl?.endsWith('doc4.xml')
+        )?.documentUrl ||
+        filing.documentFormatFiles?.find(f =>
+          f.type === '4' && !f.documentUrl?.includes('xslF345')
+        )?.documentUrl ||
+        filing.documentFormatFiles?.[1]?.documentUrl
 
         if (!xmlUrl) continue
 
