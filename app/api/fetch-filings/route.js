@@ -23,7 +23,6 @@ export async function GET(request) {
     let totalInserted = 0
     const results = []
 
-    // Process in batches of 10
     for (let i = 0; i < Math.min(tickers.length, 30); i += 10) {
       const batch = tickers.slice(i, i + 10)
       const tickerQuery = batch.map(t => `"${t}"`).join(' OR ')
@@ -34,7 +33,11 @@ export async function GET(request) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: `issuer.tradingSymbol:(${tickerQuery}) AND periodOfReport:[2024-01-01 TO *]`,
+          query: {
+            query_string: {
+              query: `issuer.tradingSymbol:(${tickerQuery}) AND periodOfReport:[2024-01-01 TO *]`
+            }
+          },
           from: 0,
           size: 50,
           sort: [{ periodOfReport: { order: 'desc' } }]
@@ -57,73 +60,3 @@ export async function GET(request) {
       }
 
       const filings = data.data || []
-      results.push({ batch, filings_found: filings.length })
-
-      for (const filing of filings) {
-        const ticker = filing.issuer?.tradingSymbol
-        const company = companyMap[ticker]
-        if (!company) continue
-
-        const insiderName = filing.reportingOwner?.name || 'Unknown'
-        const insiderTitle = filing.reportingOwner?.relationship?.officerTitle ||
-          (filing.reportingOwner?.relationship?.isDirector ? 'Director' : 'Insider')
-
-        let { data: insider } = await supabase
-          .from('insiders')
-          .select('id')
-          .eq('name', insiderName)
-          .eq('company_id', company.id)
-          .maybeSingle()
-
-        if (!insider) {
-          const { data: newInsider } = await supabase
-            .from('insiders')
-            .insert({ name: insiderName, title: insiderTitle, company_id: company.id })
-            .select('id')
-            .single()
-          insider = newInsider
-        }
-
-        if (!insider) continue
-
-        const transactions = filing.nonDerivativeTable?.transactions || []
-        for (const tx of transactions) {
-          const code = tx.coding?.code
-          const type = code === 'P' ? 'BUY' : code === 'S' ? 'SELL' : null
-          if (!type) continue
-
-          const shares = parseFloat(tx.amounts?.shares) || 0
-          const price = parseFloat(tx.amounts?.pricePerShare) || 0
-          const total = shares * price
-          const date = tx.transactionDate || filing.periodOfReport
-
-          if (shares === 0 || price === 0) continue
-
-          const { error } = await supabase.from('trades').upsert({
-            company_id: company.id,
-            insider_id: insider.id,
-            insider_name: insiderName,
-            insider_title: insiderTitle,
-            transaction_date: date,
-            trade_date: date,
-            shares,
-            price_per_share: price,
-            total_value: total,
-            transaction_type: type,
-            trade_type: type,
-            source: 'SEC Form 4',
-            source_type: 'sec_edgar',
-            form4_url: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${filing.issuer?.cik}&type=4`
-          }, { onConflict: 'company_id,insider_id,transaction_date,shares' })
-
-          if (!error) totalInserted++
-        }
-      }
-    }
-
-    return NextResponse.json({ success: true, total_inserted: totalInserted, results })
-
-  } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
