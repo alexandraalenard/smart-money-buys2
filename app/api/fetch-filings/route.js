@@ -6,32 +6,33 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-const SEC_UA = { 'User-Agent': 'SmartMoneyBuys contact@smartmoneybuys.com' }
-
 export async function GET(request) {
   try {
-    const { data: companies } = await supabase.from('companies').select('id, ticker')
-    if (!companies?.length) return NextResponse.json({ error: 'No companies' }, { status: 400 })
+    const { data: companies } = await supabase
+      .from('companies')
+      .select('id, ticker, name')
 
-    const results = []
-
-    for (const company of companies.slice(0, 5)) {
-      try {
-        const searchRes = await fetch(
-          `https://efts.sec.gov/LATEST/search-index?q=%22${company.ticker}%22&forms=4&dateRange=custom&startdt=2026-01-01`,
-          { headers: SEC_UA }
-        )
-        if (!searchRes.ok) { results.push({ ticker: company.ticker, status: 'search_failed' }); continue }
-        const searchData = await searchRes.json()
-        const hits = searchData.hits?.hits || []
-        results.push({ ticker: company.ticker, status: 'ok', count: hits.length })
-      } catch (e) {
-        results.push({ ticker: company.ticker, status: 'error', error: e.message })
-      }
+    if (!companies?.length) {
+      return NextResponse.json({ error: 'No companies found' }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true, results })
-  } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
+    const tickers = companies.map(c => c.ticker)
+    const companyMap = {}
+    for (const c of companies) companyMap[c.ticker] = c.id
+
+    // Query sec-api.io for real Form 4 insider trades
+    const query = {
+      query: {
+        query_string: {
+          query: `formType:"4" AND periodOfReport:[now-90d TO now]`
+        }
+      },
+      from: '0',
+      size: '50',
+      sort: [{ filedAt: { order: 'desc' } }]
+    }
+
+    const secRes = await fetch('https://efts.sec.gov/LATEST/search-index?q=%22form+4%22&dateRange=custom&startdt=2025-01-01&forms=4', {
+      headers: {
+        'Authorization': process.env.SEC_API_KEY,
+        'Content-Type': 'application/json'
