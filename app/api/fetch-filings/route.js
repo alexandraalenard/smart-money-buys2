@@ -6,15 +6,41 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
+function extractBetween(text, start, end) {
+  const s = text.indexOf(start)
+  if (s === -1) return null
+  const e = text.indexOf(end, s + start.length)
+  if (e === -1) return null
+  return text.slice(s + start.length, e).trim()
+}
+
+function parseForm4XML(xml) {
+  const trades = []
+  const insiderName = extractBetween(xml, '<rptOwnerName>', '</rptOwnerName>') || 'Unknown'
+  const insiderTitle = extractBetween(xml, '<officerTitle>', '</officerTitle>') || ''
+  const isDirector = xml.includes('<isDirector>1</isDirector>')
+
+  // Find all nonDerivativeTransaction blocks
+  const txRegex = /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/g
+  let match
+  while ((match = txRegex.exec(xml)) !== null) {
+    const block = match[1]
+    const code = extractBetween(block, '<transactionCode>', '</transactionCode>')
+    const shares = parseFloat(extractBetween(block, '<transactionShares>', '</transactionShares>') || '0')
+    const price = parseFloat(extractBetween(block, '<transactionPricePerShare>', '</transactionPricePerShare>') || '0')
+    const date = extractBetween(block, '<transactionDate>', '</transactionDate>')
+    const type = code === 'P' ? 'BUY' : code === 'S' ? 'SELL' : null
+    if (type && shares > 0 && price > 0) {
+      trades.push({ insiderName, insiderTitle: insiderTitle || (isDirector ? 'Director' : 'Insider'), type, shares, price, total: shares * price, date })
+    }
+  }
+  return trades
+}
+
 export async function GET(request) {
   try {
-    const { data: companies } = await supabase
-      .from('companies')
-      .select('id, ticker, name')
-
-    if (!companies?.length) {
-      return NextResponse.json({ error: 'No companies found' }, { status: 400 })
-    }
+    const { data: companies } = await supabase.from('companies').select('id, ticker, name')
+    if (!companies?.length) return NextResponse.json({ error: 'No companies found' }, { status: 400 })
 
     const companyMap = {}
     for (const c of companies) companyMap[c.ticker] = c
@@ -23,14 +49,11 @@ export async function GET(request) {
     let totalInserted = 0
     const results = []
 
-    for (let i = 0; i < Math.min(tickers.length, 30); i += 10) {
+    for (let i = 0; i < Math.min(tickers.length, 20); i += 10) {
       const batch = tickers.slice(i, i + 10)
       const tickerQuery = batch.join(' OR ')
 
-      // Use the Filing Query API (free tier) to find Form 4 filings
-      const url = `https://api.sec-api.io?token=${process.env.SEC_API_KEY}`
-
-      const res = await fetch(url, {
+      const res = await fetch(`https://api.sec-api.io?token=${process.env.SEC_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -40,26 +63,13 @@ export async function GET(request) {
             }
           },
           from: 0,
-          size: 50,
+          size: 10,
           sort: [{ filedAt: { order: 'desc' } }]
         })
       })
 
-      const text = await res.text()
-
-      if (!res.ok) {
-        results.push({ batch, status: res.status, error: text.slice(0, 300) })
-        continue
-      }
-
-      let data
-      try {
-        data = JSON.parse(text)
-      } catch (e) {
-        results.push({ batch, error: 'Invalid JSON: ' + text.slice(0, 300) })
-        continue
-      }
-
+      if (!res.ok) { results.push({ batch, error: await res.text() }); continue }
+      const data = await res.json()
       const filings = data.filings || []
       results.push({ batch, filings_found: filings.length })
 
@@ -68,88 +78,58 @@ export async function GET(request) {
         const company = companyMap[ticker]
         if (!company) continue
 
-        // Fetch the actual Form 4 data from the insider trading endpoint
-        const insiderRes = await fetch(
-          `https://api.sec-api.io/insider-trading?token=${process.env.SEC_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: {
-                query_string: {
-                  query: `accessionNo:"${filing.accessionNo}"`
-                }
-              },
-              from: 0,
-              size: 1
-            })
+        // Fetch the actual XML filing
+        const xmlUrl = filing.linkToFilingDetails?.replace('-index.htm', '.xml') ||
+          filing.documentFormatFiles?.[0]?.documentUrl
+        if (!xmlUrl) continue
+
+        try {
+          const xmlRes = await fetch(xmlUrl, {
+            headers: { 'User-Agent': 'TheHiddenLedger contact@thehiddenledger.com' }
+          })
+          if (!xmlRes.ok) continue
+          const xml = await xmlRes.text()
+          const trades = parseForm4XML(xml)
+
+          for (const tx of trades) {
+            let { data: insider } = await supabase
+              .from('insiders').select('id')
+              .eq('name', tx.insiderName).eq('company_id', company.id).maybeSingle()
+
+            if (!insider) {
+              const { data: ni } = await supabase.from('insiders')
+                .insert({ name: tx.insiderName, title: tx.insiderTitle, company_id: company.id })
+                .select('id').single()
+              insider = ni
+            }
+            if (!insider) continue
+
+            const { error } = await supabase.from('trades').upsert({
+              company_id: company.id,
+              insider_id: insider.id,
+              insider_name: tx.insiderName,
+              insider_title: tx.insiderTitle,
+              transaction_date: tx.date,
+              trade_date: tx.date,
+              shares: tx.shares,
+              price_per_share: tx.price,
+              total_value: tx.total,
+              transaction_type: tx.type,
+              trade_type: tx.type,
+              source: 'SEC Form 4',
+              source_type: 'sec_edgar',
+              form4_url: filing.linkToFilingDetails || ''
+            }, { onConflict: 'company_id,insider_id,transaction_date,shares' })
+
+            if (!error) totalInserted++
           }
-        )
-
-        if (!insiderRes.ok) continue
-        const insiderData = await insiderRes.json()
-        const form4 = insiderData.data?.[0]
-        if (!form4) continue
-
-        const insiderName = form4.reportingOwner?.name || 'Unknown'
-        const insiderTitle = form4.reportingOwner?.relationship?.officerTitle ||
-          (form4.reportingOwner?.relationship?.isDirector ? 'Director' : 'Insider')
-
-        let { data: insider } = await supabase
-          .from('insiders')
-          .select('id')
-          .eq('name', insiderName)
-          .eq('company_id', company.id)
-          .maybeSingle()
-
-        if (!insider) {
-          const { data: newInsider } = await supabase
-            .from('insiders')
-            .insert({ name: insiderName, title: insiderTitle, company_id: company.id })
-            .select('id')
-            .single()
-          insider = newInsider
-        }
-
-        if (!insider) continue
-
-        const transactions = form4.nonDerivativeTable?.transactions || []
-        for (const tx of transactions) {
-          const code = tx.coding?.code
-          const type = code === 'P' ? 'BUY' : code === 'S' ? 'SELL' : null
-          if (!type) continue
-
-          const shares = parseFloat(tx.amounts?.shares) || 0
-          const price = parseFloat(tx.amounts?.pricePerShare) || 0
-          const total = shares * price
-          const date = tx.transactionDate || form4.periodOfReport
-
-          if (shares === 0 || price === 0) continue
-
-          const { error } = await supabase.from('trades').upsert({
-            company_id: company.id,
-            insider_id: insider.id,
-            insider_name: insiderName,
-            insider_title: insiderTitle,
-            transaction_date: date,
-            trade_date: date,
-            shares,
-            price_per_share: price,
-            total_value: total,
-            transaction_type: type,
-            trade_type: type,
-            source: 'SEC Form 4',
-            source_type: 'sec_edgar',
-            form4_url: filing.linkToFilingDetails || ''
-          }, { onConflict: 'company_id,insider_id,transaction_date,shares' })
-
-          if (!error) totalInserted++
+        } catch (e) {
+          results.push({ ticker, xmlError: e.message })
         }
       }
     }
 
     return NextResponse.json({ success: true, total_inserted: totalInserted, results })
-
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
