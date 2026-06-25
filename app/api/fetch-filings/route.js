@@ -71,7 +71,7 @@ export async function GET(request) {
       if (!res.ok) { results.push({ batch, error: await res.text() }); continue }
       const data = await res.json()
       const filings = data.filings || []
-      results.push({ batch, filings_found: filings.length })
+      results.push({ batch, filings_found: filings.length, sample: filings[0] ? { ticker: filings[0].ticker, linkToFilingDetails: filings[0].linkToFilingDetails, documentFormatFiles: filings[0].documentFormatFiles?.slice(0,2) } : null })
 
       for (const filing of filings) {
         const ticker = filing.ticker
