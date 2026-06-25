@@ -67,34 +67,28 @@ function scorePurchaseSize(value = 0) {
   return 0
 }
 
-// Compute the 5 component scores
 function computeComponents(trades = []) {
   const buys = trades.filter(t => t.transaction_type === 'BUY' || t.transaction_type === 'P')
   const totalValue = buys.reduce((sum, t) => sum + (t.total_value || 0), 0)
   const topTrade = buys.sort((a, b) => (b.total_value || 0) - (a.total_value || 0))[0]
 
-  // 1. Insider Conviction - quality of who is buying
   let insiderConviction = 0
   for (const t of buys) insiderConviction += scoreInsiderTitle(t.insider_title)
   insiderConviction = Math.min(Math.round(insiderConviction / Math.max(buys.length, 1) * 1.5), 100)
 
-  // 2. Leadership Alignment - multiple seniors buying together
   let leadershipAlignment = scoreMultipleInsiders(buys) + scoreSamePeriod(buys)
   leadershipAlignment = Math.min(Math.round(leadershipAlignment * 2), 100)
 
-  // 3. Historical Edge - pattern matching proxy (no selling + recency)
   const mostRecentDate = buys.map(t => t.transaction_date).sort().reverse()[0]
   let historicalEdge = scoreNoRecentSelling(trades) + scoreRecency(mostRecentDate)
   if (buys.length >= 3) historicalEdge += 15
   if (buys.length >= 5) historicalEdge += 10
   historicalEdge = Math.min(Math.round(historicalEdge * 3.5), 100)
 
-  // 4. Capital Commitment - size of the bet
   let capitalCommitment = scorePurchaseSize(topTrade?.total_value || 0)
   const totalScore = scorePurchaseSize(totalValue)
   capitalCommitment = Math.min(Math.round((capitalCommitment + totalScore) * 2.5), 100)
 
-  // 5. AI Opportunity Rating - composite of all signals
   const rawComposite = (insiderConviction + leadershipAlignment + historicalEdge + capitalCommitment)
   const aiOpportunity = Math.min(Math.round(rawComposite * 1.1), 100)
 
@@ -125,4 +119,27 @@ export async function GET(request) {
         .select('*')
         .eq('company_id', company.id)
 
-      const components =
+      const components = computeComponents(trades || [])
+      const score = computeRawScore(components)
+
+      await supabase.from('rankings').upsert({
+        company_id: company.id,
+        ticker: company.ticker,
+        score,
+        insider_conviction: components.insiderConviction,
+        leadership_alignment: components.leadershipAlignment,
+        historical_edge: components.historicalEdge,
+        capital_commitment: components.capitalCommitment,
+        ai_opportunity: components.aiOpportunity,
+        ranked_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'company_id' })
+
+      results.push({ ticker: company.ticker, score, components })
+    }
+
+    return NextResponse.json({ success: true, count: results.length, results })
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
