@@ -20,7 +20,6 @@ function parseForm4XML(xml) {
   const insiderTitle = extractBetween(xml, '<officerTitle>', '</officerTitle>') || ''
   const isDirector = xml.includes('<isDirector>1</isDirector>')
 
-  // Find all nonDerivativeTransaction blocks
   const txRegex = /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/g
   let match
   while ((match = txRegex.exec(xml)) !== null) {
@@ -71,16 +70,17 @@ export async function GET(request) {
       if (!res.ok) { results.push({ batch, error: await res.text() }); continue }
       const data = await res.json()
       const filings = data.filings || []
-      results.push({ batch, filings_found: filings.length, sample: filings[0] ? { ticker: filings[0].ticker, linkToFilingDetails: filings[0].linkToFilingDetails, documentFormatFiles: filings[0].documentFormatFiles?.slice(0,2) } : null })
 
       for (const filing of filings) {
         const ticker = filing.ticker
         const company = companyMap[ticker]
         if (!company) continue
 
-        // Fetch the actual XML filing
-        const xmlUrl = filing.linkToFilingDetails?.replace('-index.htm', '.xml') ||
-          filing.documentFormatFiles?.[0]?.documentUrl
+        // Find the wk-form4 XML file specifically
+        const xmlUrl = filing.documentFormatFiles?.find(f =>
+          f.documentUrl?.includes('wk-form4')
+        )?.documentUrl || filing.documentFormatFiles?.[1]?.documentUrl
+
         if (!xmlUrl) continue
 
         try {
@@ -90,6 +90,8 @@ export async function GET(request) {
           if (!xmlRes.ok) continue
           const xml = await xmlRes.text()
           const trades = parseForm4XML(xml)
+
+          results.push({ ticker, xmlUrl, trades_found: trades.length })
 
           for (const tx of trades) {
             let { data: insider } = await supabase
@@ -127,6 +129,8 @@ export async function GET(request) {
           results.push({ ticker, xmlError: e.message })
         }
       }
+
+      results.push({ batch, filings_found: filings.length })
     }
 
     return NextResponse.json({ success: true, total_inserted: totalInserted, results })
