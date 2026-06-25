@@ -23,17 +23,16 @@ export async function GET(request) {
     let totalInserted = 0
     const results = []
 
-    // Process in batches of 10 tickers at a time
-    for (let i = 0; i < Math.min(tickers.length, 50); i += 10) {
+    // Process in batches of 10
+    for (let i = 0; i < Math.min(tickers.length, 30); i += 10) {
       const batch = tickers.slice(i, i + 10)
       const tickerQuery = batch.map(t => `"${t}"`).join(' OR ')
 
-      const res = await fetch('https://api.sec-api.io/insider-trading', {
+      const url = `https://api.sec-api.io/insider-trading?token=${process.env.SEC_API_KEY}`
+
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Authorization': process.env.SEC_API_KEY,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `issuer.tradingSymbol:(${tickerQuery}) AND periodOfReport:[2024-01-01 TO *]`,
           from: 0,
@@ -42,14 +41,23 @@ export async function GET(request) {
         })
       })
 
+      const text = await res.text()
+
       if (!res.ok) {
-        const err = await res.text()
-        results.push({ batch, error: err })
+        results.push({ batch, status: res.status, error: text.slice(0, 200) })
         continue
       }
 
-      const data = await res.json()
+      let data
+      try {
+        data = JSON.parse(text)
+      } catch (e) {
+        results.push({ batch, error: 'Invalid JSON: ' + text.slice(0, 200) })
+        continue
+      }
+
       const filings = data.data || []
+      results.push({ batch, filings_found: filings.length })
 
       for (const filing of filings) {
         const ticker = filing.issuer?.tradingSymbol
@@ -57,10 +65,9 @@ export async function GET(request) {
         if (!company) continue
 
         const insiderName = filing.reportingOwner?.name || 'Unknown'
-        const insiderTitle = filing.reportingOwner?.relationship?.officerTitle || 
-                            (filing.reportingOwner?.relationship?.isDirector ? 'Director' : 'Insider')
+        const insiderTitle = filing.reportingOwner?.relationship?.officerTitle ||
+          (filing.reportingOwner?.relationship?.isDirector ? 'Director' : 'Insider')
 
-        // Get or create insider
         let { data: insider } = await supabase
           .from('insiders')
           .select('id')
@@ -79,7 +86,6 @@ export async function GET(request) {
 
         if (!insider) continue
 
-        // Process non-derivative transactions
         const transactions = filing.nonDerivativeTable?.transactions || []
         for (const tx of transactions) {
           const code = tx.coding?.code
@@ -112,16 +118,10 @@ export async function GET(request) {
 
           if (!error) totalInserted++
         }
-
-        results.push({ ticker, insider: insiderName, trades: transactions.length })
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      total_inserted: totalInserted,
-      results
-    })
+    return NextResponse.json({ success: true, total_inserted: totalInserted, results })
 
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
