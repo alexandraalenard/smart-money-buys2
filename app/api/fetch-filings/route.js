@@ -15,7 +15,6 @@ function extractBetween(text, start, end) {
 }
 
 function extractValue(text, tag) {
-  // Handles both <tag>value</tag> and <tag><value>value</value></tag>
   const block = extractBetween(text, `<${tag}>`, `</${tag}>`)
   if (!block) return null
   if (block.includes('<value>')) return extractBetween(block, '<value>', '</value>')
@@ -116,9 +115,10 @@ export async function GET(request) {
               .eq('name', tx.insiderName).eq('company_id', company.id).maybeSingle()
 
             if (!insider) {
-              const { data: ni } = await supabase.from('insiders')
+              const { data: ni, error: insiderError } = await supabase.from('insiders')
                 .insert({ name: tx.insiderName, title: tx.insiderTitle, company_id: company.id })
                 .select('id').single()
+              if (insiderError) { results.push({ insiderError: insiderError.message }); continue }
               insider = ni
             }
             if (!insider) continue
@@ -140,7 +140,11 @@ export async function GET(request) {
               form4_url: filing.linkToFilingDetails || ''
             }, { onConflict: 'company_id,insider_id,transaction_date,shares' })
 
-            if (!error) totalInserted++
+            if (error) {
+              results.push({ insertError: error.message, ticker, shares: tx.shares, date: tx.date })
+            } else {
+              totalInserted++
+            }
           }
         } catch (e) {
           results.push({ ticker, xmlError: e.message })
