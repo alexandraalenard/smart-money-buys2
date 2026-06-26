@@ -34,6 +34,7 @@ export default function Home() {
       .from('rankings')
       .select(`*, companies (ticker, name, sector)`)
       .order('score', { ascending: false })
+      .limit(10)
     if (data) setRankings(data)
     setLoading(false)
   }
@@ -74,10 +75,9 @@ export default function Home() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
-          <Link href="/" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Signals</Link>
-          <Link href="/sell-alerts" style={{ fontSize: '13px', color: '#C9A84C', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', fontWeight: 700 }}>Sell Alerts</Link>
-          <Link href="/congress" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', opacity: 0.5 }}>Congress</Link>
-          <Link href="/institutions" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', opacity: 0.5 }}>Institutions</Link>
+          <span style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>Signals</span>
+          <span style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>Congress</span>
+          <span style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>Institutions</span>
           <button style={{ background: '#C9A84C', color: '#07130E', border: 'none', padding: '8px 20px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer' }}>Subscribe</button>
         </div>
       </nav>
@@ -99,7 +99,7 @@ export default function Home() {
               Smart Money Buys tracks SEC Form 4 filings, congressional disclosures and institutional 13F filings — then ranks every signal by AI confidence score.
             </p>
             <div style={{ display: 'flex', gap: '16px' }}>
-              <button style={{ background: '#C9A84C', color: '#07130E', border: 'none', padding: '14px 32px', borderRadius: '6px', fontSize: '14px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>View Today&apos;s Signals</button>
+              <button style={{ background: '#C9A84C', color: '#07130E', border: 'none', padding: '14px 32px', borderRadius: '6px', fontSize: '14px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>View Today's Signals</button>
               <button style={{ background: 'transparent', color: '#F7F4EF', border: '1px solid #2D6A4F', padding: '14px 32px', borderRadius: '6px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>How It Works</button>
             </div>
           </div>
@@ -146,12 +146,12 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ALL SIGNALS */}
+      {/* TOP SIGNALS */}
       <section style={{ padding: '72px 48px', maxWidth: '1280px', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '40px' }}>
           <div>
             <div style={{ fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '10px', fontWeight: 600 }}>AI-Ranked · Updated Daily</div>
-            <h2 style={{ fontSize: '36px', fontFamily: 'Georgia, serif', fontWeight: 700, color: '#F7F4EF', margin: 0 }}>Today&apos;s Top Signals</h2>
+            <h2 style={{ fontSize: '36px', fontFamily: 'Georgia, serif', fontWeight: 700, color: '#F7F4EF', margin: 0 }}>Today's Top Signals</h2>
           </div>
           <div style={{ fontSize: '13px', color: '#2D6A4F', fontStyle: 'italic' }}>Ranked by AI Confidence Score</div>
         </div>
@@ -176,6 +176,7 @@ export default function Home() {
                     gap: '24px',
                     alignItems: 'center',
                     cursor: 'pointer',
+                    transition: 'border-color 0.2s',
                     position: 'relative',
                     overflow: 'hidden',
                   }}>
@@ -188,6 +189,7 @@ export default function Home() {
                         <span style={{ background: '#2D6A4F', border: '1px solid #C9A84C', borderRadius: '100px', padding: '2px 10px', fontSize: '10px', color: '#C9A84C', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{company.sector}</span>
                       </div>
                       <div style={{ fontSize: '13px', color: '#DFC48B', fontStyle: 'italic' }}>{r.ai_summary || 'Multiple insider purchases detected. Institutional interest increasing.'}</div>
+                      {/* Mini score bars */}
                       <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
                         {[
                           { label: 'Insider', val: r.insider_conviction },
@@ -226,7 +228,7 @@ export default function Home() {
           <h2 style={{ fontFamily: 'Georgia, serif', fontSize: '32px', fontWeight: 700, color: '#F7F4EF', marginBottom: '12px' }}>5 filings worth watching<br /><span style={{ fontStyle: 'italic', color: '#C9A84C' }}>before Monday.</span></h2>
           <p style={{ color: '#DFC48B', fontSize: '15px', lineHeight: 1.7, marginBottom: '32px' }}>Every weekend we send the top-ranked insider signals direct to your inbox. No noise. Just the trades worth watching.</p>
           {subscribed ? (
-            <div style={{ background: '#2D6A4F', border: '1px solid #C9A84C', borderRadius: '8px', padding: '16px 24px', color: '#C9A84C', fontWeight: 600 }}>✓ You&apos;re on the list. Watch your inbox.</div>
+            <div style={{ background: '#2D6A4F', border: '1px solid #C9A84C', borderRadius: '8px', padding: '16px 24px', color: '#C9A84C', fontWeight: 600 }}>✓ You're on the list. Watch your inbox.</div>
           ) : (
             <div style={{ display: 'flex', gap: '12px', maxWidth: '440px', margin: '0 auto' }}>
               <input
