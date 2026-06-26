@@ -19,17 +19,17 @@ export async function GET() {
           sector
         )
       `)
-      .order('rank', { ascending: true })
+      .order('ai_confidence_score', { ascending: false })
       .limit(10)
 
     if (error) throw error
 
-    const rankings = data.map(row => ({
+    const rankings = data.map((row, i) => ({
       id: row.companies.id,
       ticker: row.companies.ticker,
       name: row.companies.name,
       sector: row.companies.sector,
-      rank: row.rank,
+      rank: row.rank ?? i + 1,
       ai_confidence_score: row.ai_confidence_score,
     }))
 
