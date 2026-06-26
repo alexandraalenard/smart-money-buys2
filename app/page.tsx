@@ -82,8 +82,10 @@ export default function Home() {
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
           <Link href="/" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Signals</Link>
           <Link href="/sell-alerts" style={{ fontSize: '13px', color: '#C9A84C', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', fontWeight: 700 }}>Sell Alerts</Link>
-          <Link href="/congress" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', opacity: 0.5 }}>Congress</Link>
-          <Link href="/institutions" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', opacity: 0.5 }}>Institutions</Link>
+          <Link href="/market-pulse" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Market Pulse</Link>
+          <Link href="/stock-screener" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Screener</Link>
+          <Link href="/billionaires-corner" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Billionaires</Link>
+          <Link href="/buyers-corner" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Buyers Corner</Link>
           <Link href="/pricing" style={{ background: '#C9A84C', color: '#07130E', border: 'none', padding: '8px 20px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Subscribe</Link>
         </div>
       </nav>
