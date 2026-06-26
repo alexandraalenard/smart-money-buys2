@@ -24,15 +24,14 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [subscribed, setSubscribed] = useState(false)
+  const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    fetchRankings()
-  }, [])
+  useEffect(() => { fetchRankings() }, [])
 
   async function fetchRankings() {
     const { data } = await supabase
       .from('rankings')
-      .select(`*, companies (ticker, name, sector)`)
+      .select('*, companies (ticker, name, sector)')
       .order('score', { ascending: false })
     if (data) setRankings(data)
     setLoading(false)
@@ -52,6 +51,13 @@ export default function Home() {
     if (score >= 30) return 'Moderate'
     return 'Weak Signal'
   }
+
+  const filtered = rankings.filter(r => {
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    const co = r.companies || { name: r.ticker, sector: '' }
+    return r.ticker.toLowerCase().includes(q) || co.name.toLowerCase().includes(q)
+  })
 
   const stats = [
     { value: '2,847', label: 'Trades Tracked' },
@@ -78,7 +84,7 @@ export default function Home() {
           <Link href="/sell-alerts" style={{ fontSize: '13px', color: '#C9A84C', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', fontWeight: 700 }}>Sell Alerts</Link>
           <Link href="/congress" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', opacity: 0.5 }}>Congress</Link>
           <Link href="/institutions" style={{ fontSize: '13px', color: '#DFC48B', letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none', opacity: 0.5 }}>Institutions</Link>
-          <button style={{ background: '#C9A84C', color: '#07130E', border: 'none', padding: '8px 20px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer' }}>Subscribe</button>
+          <Link href="/pricing" style={{ background: '#C9A84C', color: '#07130E', border: 'none', padding: '8px 20px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'none' }}>Subscribe</Link>
         </div>
       </nav>
 
@@ -89,12 +95,8 @@ export default function Home() {
             <div style={{ display: 'inline-block', background: '#2D6A4F', border: '1px solid #C9A84C', borderRadius: '100px', padding: '4px 14px', marginBottom: '28px' }}>
               <span style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A84C', fontWeight: 600 }}>Follow the money. Find the signal.</span>
             </div>
-            <h1 style={{ fontSize: '52px', lineHeight: 1.1, fontWeight: 700, marginBottom: '12px', fontFamily: 'Georgia, serif' }}>
-              The information
-            </h1>
-            <h1 style={{ fontSize: '52px', lineHeight: 1.1, fontStyle: 'italic', color: '#C9A84C', marginBottom: '24px', fontFamily: 'Georgia, serif', fontWeight: 400 }}>
-              they acted on.
-            </h1>
+            <h1 style={{ fontSize: '52px', lineHeight: 1.1, fontWeight: 700, marginBottom: '12px', fontFamily: 'Georgia, serif' }}>The information</h1>
+            <h1 style={{ fontSize: '52px', lineHeight: 1.1, fontStyle: 'italic', color: '#C9A84C', marginBottom: '24px', fontFamily: 'Georgia, serif', fontWeight: 400 }}>they acted on.</h1>
             <p style={{ fontSize: '18px', color: '#DFC48B', lineHeight: 1.7, marginBottom: '40px', maxWidth: '480px' }}>
               Smart Money Buys tracks SEC Form 4 filings, congressional disclosures and institutional 13F filings — then ranks every signal by AI confidence score.
             </p>
@@ -120,7 +122,7 @@ export default function Home() {
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-              {[['Value', '$500K–$1M'], ['Filed', '2024-01-17'], ['Gain Since', '+31.4%']].map(([label, val]) => (
+              {[['Value', '$500K-$1M'], ['Filed', '2024-01-17'], ['Gain Since', '+31.4%']].map(([label, val]) => (
                 <div key={label} style={{ background: '#2D6A4F', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '10px', color: '#C9A84C', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '4px' }}>{label}</div>
                   <div style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 600, color: '#F7F4EF' }}>{val}</div>
@@ -148,7 +150,7 @@ export default function Home() {
 
       {/* ALL SIGNALS */}
       <section style={{ padding: '72px 48px', maxWidth: '1280px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '40px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px' }}>
           <div>
             <div style={{ fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '10px', fontWeight: 600 }}>AI-Ranked · Updated Daily</div>
             <h2 style={{ fontSize: '36px', fontFamily: 'Georgia, serif', fontWeight: 700, color: '#F7F4EF', margin: 0 }}>Today&apos;s Top Signals</h2>
@@ -156,19 +158,40 @@ export default function Home() {
           <div style={{ fontSize: '13px', color: '#2D6A4F', fontStyle: 'italic' }}>Ranked by AI Confidence Score</div>
         </div>
 
+        {/* SEARCH BAR */}
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ position: 'relative', maxWidth: '400px' }}>
+            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#2D6A4F', fontSize: '14px' }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search by ticker or company name..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: '100%', background: '#1B4332', border: '1px solid #2D6A4F', borderRadius: '8px', padding: '12px 16px 12px 40px', color: '#F7F4EF', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+          {search.trim() && (
+            <div style={{ marginTop: '8px', fontSize: '12px', color: '#2D6A4F' }}>
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''} for &ldquo;{search}&rdquo;
+            </div>
+          )}
+        </div>
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: '80px', color: '#2D6A4F', fontStyle: 'italic' }}>Scanning SEC filings...</div>
-        ) : rankings.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '80px', color: '#2D6A4F' }}>No signals yet. Run the scoring engine to populate rankings.</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '80px', color: '#2D6A4F' }}>
+            {search.trim() ? 'No results found. Try a different search.' : 'No signals yet. Run the scoring engine to populate rankings.'}
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {rankings.map((r, i) => {
+            {filtered.map((r, i) => {
               const company = r.companies || { name: r.ticker, sector: 'Unknown' }
               return (
-                <Link href={`/company/${r.ticker}`} key={r.id} style={{ textDecoration: 'none' }}>
+                <Link href={'/company/' + r.ticker} key={r.id} style={{ textDecoration: 'none' }}>
                   <div style={{
                     background: '#1B4332',
-                    border: `1px solid ${i === 0 ? '#C9A84C' : '#2D6A4F'}`,
+                    border: '1px solid ' + (i === 0 && !search.trim() ? '#C9A84C' : '#2D6A4F'),
                     borderRadius: '10px',
                     padding: '24px 28px',
                     display: 'grid',
@@ -179,8 +202,8 @@ export default function Home() {
                     position: 'relative',
                     overflow: 'hidden',
                   }}>
-                    {i === 0 && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, #C9A84C, #DFC48B)' }} />}
-                    <div style={{ fontFamily: 'Georgia, serif', fontSize: '28px', fontWeight: 700, color: i === 0 ? '#C9A84C' : '#2D6A4F' }}>#{i + 1}</div>
+                    {i === 0 && !search.trim() && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, #C9A84C, #DFC48B)' }} />}
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: '28px', fontWeight: 700, color: i === 0 && !search.trim() ? '#C9A84C' : '#2D6A4F' }}>#{i + 1}</div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
                         <span style={{ fontFamily: 'monospace', fontSize: '18px', fontWeight: 700, color: '#F7F4EF' }}>{r.ticker}</span>
@@ -199,7 +222,7 @@ export default function Home() {
                           <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ fontSize: '10px', color: '#C9A84C', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
                             <div style={{ width: '60px', height: '4px', background: '#07130E', borderRadius: '2px', overflow: 'hidden' }}>
-                              <div style={{ width: `${val || 0}%`, height: '100%', background: '#C9A84C', borderRadius: '2px' }} />
+                              <div style={{ width: (val || 0) + '%', height: '100%', background: '#C9A84C', borderRadius: '2px' }} />
                             </div>
                           </div>
                         ))}
@@ -226,7 +249,7 @@ export default function Home() {
           <h2 style={{ fontFamily: 'Georgia, serif', fontSize: '32px', fontWeight: 700, color: '#F7F4EF', marginBottom: '12px' }}>5 filings worth watching<br /><span style={{ fontStyle: 'italic', color: '#C9A84C' }}>before Monday.</span></h2>
           <p style={{ color: '#DFC48B', fontSize: '15px', lineHeight: 1.7, marginBottom: '32px' }}>Every weekend we send the top-ranked insider signals direct to your inbox. No noise. Just the trades worth watching.</p>
           {subscribed ? (
-            <div style={{ background: '#2D6A4F', border: '1px solid #C9A84C', borderRadius: '8px', padding: '16px 24px', color: '#C9A84C', fontWeight: 600 }}>✓ You&apos;re on the list. Watch your inbox.</div>
+            <div style={{ background: '#2D6A4F', border: '1px solid #C9A84C', borderRadius: '8px', padding: '16px 24px', color: '#C9A84C', fontWeight: 600 }}>You&apos;re on the list. Watch your inbox.</div>
           ) : (
             <div style={{ display: 'flex', gap: '12px', maxWidth: '440px', margin: '0 auto' }}>
               <input
@@ -250,13 +273,12 @@ export default function Home() {
       {/* FOOTER */}
       <footer style={{ padding: '40px 48px', borderTop: '1px solid #1B4332' }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '12px', color: '#2D6A4F' }}>© 2026 Smart Money Buys · All rights reserved</div>
+          <div style={{ fontSize: '12px', color: '#2D6A4F' }}>2026 Smart Money Buys · All rights reserved</div>
           <div style={{ fontSize: '11px', color: '#2D6A4F', maxWidth: '600px', lineHeight: 1.6 }}>
-            * Source: SEC Form 4 — public insider trading disclosures filed with the U.S. Securities and Exchange Commission · ** Source: House/Senate financial disclosure filings, Office of the Clerk · All data is publicly available. Not financial advice.
+            * Source: SEC Form 4 — public insider trading disclosures · ** House/Senate financial disclosure filings, Office of the Clerk · All data is publicly available. Not financial advice.
           </div>
         </div>
       </footer>
-
     </main>
   )
 }
