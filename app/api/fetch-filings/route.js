@@ -14,23 +14,37 @@ function extractBetween(text, start, end) {
   return text.slice(s + start.length, e).trim()
 }
 
+function extractValue(text, tag) {
+  // Handles both <tag>value</tag> and <tag><value>value</value></tag>
+  const block = extractBetween(text, `<${tag}>`, `</${tag}>`)
+  if (!block) return null
+  if (block.includes('<value>')) return extractBetween(block, '<value>', '</value>')
+  return block.trim()
+}
+
 function parseForm4XML(xml) {
   const trades = []
-  const insiderName = extractBetween(xml, '<rptOwnerName>', '</rptOwnerName>') || 'Unknown'
-  const insiderTitle = extractBetween(xml, '<officerTitle>', '</officerTitle>') || ''
+  const insiderName = extractValue(xml, 'rptOwnerName') || 'Unknown'
+  const insiderTitle = extractValue(xml, 'officerTitle') || ''
   const isDirector = xml.includes('<isDirector>1</isDirector>')
 
   const txRegex = /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/g
   let match
   while ((match = txRegex.exec(xml)) !== null) {
     const block = match[1]
-    const code = extractBetween(block, '<transactionCode>', '</transactionCode>')
-    const shares = parseFloat(extractBetween(block, '<transactionShares>', '</transactionShares>') || '0')
-    const price = parseFloat(extractBetween(block, '<transactionPricePerShare>', '</transactionPricePerShare>') || '0')
-    const date = extractBetween(block, '<transactionDate>', '</transactionDate>')
+    const code = extractValue(block, 'transactionCode')
+    const shares = parseFloat(extractValue(block, 'transactionShares') || '0')
+    const price = parseFloat(extractValue(block, 'transactionPricePerShare') || '0')
+    const date = extractValue(block, 'transactionDate')
     const type = code === 'P' ? 'BUY' : code === 'S' ? 'SELL' : null
     if (type && shares > 0 && price > 0) {
-      trades.push({ insiderName, insiderTitle: insiderTitle || (isDirector ? 'Director' : 'Insider'), type, shares, price, total: shares * price, date })
+      trades.push({
+        insiderName,
+        insiderTitle: insiderTitle || (isDirector ? 'Director' : 'Insider'),
+        type, shares, price,
+        total: shares * price,
+        date
+      })
     }
   }
   return trades
@@ -76,7 +90,6 @@ export async function GET(request) {
         const company = companyMap[ticker]
         if (!company) continue
 
-        // Prefer raw form4.xml over stylesheet version
         const xmlUrl = filing.documentFormatFiles?.find(f =>
           f.documentUrl?.endsWith('form4.xml') || f.documentUrl?.endsWith('doc4.xml')
         )?.documentUrl ||
@@ -95,7 +108,7 @@ export async function GET(request) {
           const xml = await xmlRes.text()
           const trades = parseForm4XML(xml)
 
-          results.push({ ticker, xmlUrl, trades_found: trades.length })
+          results.push({ ticker, trades_found: trades.length })
 
           for (const tx of trades) {
             let { data: insider } = await supabase
