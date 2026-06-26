@@ -8,21 +8,29 @@ const supabase = createClient(
 export async function GET() {
   try {
     const { data, error } = await supabase
-      .from('companies')
-      .select('id, ticker, name, sector, ai_confidence_score')
-      .not('ai_confidence_score', 'is', null)
-      .order('ai_confidence_score', { ascending: false })
+      .from('rankings')
+      .select(`
+        score,
+        ticker,
+        companies (
+          id,
+          name,
+          sector
+        )
+      `)
+      .not('score', 'is', null)
+      .order('score', { ascending: false })
       .limit(10)
 
     if (error) throw error
 
-    const rankings = data.map((company, i) => ({
-      id: company.id,
-      ticker: company.ticker,
-      name: company.name,
-      sector: company.sector,
+    const rankings = data.map((row, i) => ({
+      id: row.companies?.id ?? i,
+      ticker: row.ticker,
+      name: row.companies?.name ?? row.ticker,
+      sector: row.companies?.sector ?? '',
       rank: i + 1,
-      ai_confidence_score: company.ai_confidence_score,
+      ai_confidence_score: row.score,
     }))
 
     return Response.json({ rankings })
