@@ -106,6 +106,36 @@ export default function CompanyPage() {
     catch { return d }
   }
 
+  // Estimated annual compensation by title (USD)
+  // Used to calculate how many years of salary this trade represents
+  function getEstimatedSalary(title: string): number {
+    const t = (title || '').toUpperCase()
+    if (t.includes('CEO') || t.includes('CHIEF EXECUTIVE')) return 5000000
+    if (t.includes('CFO') || t.includes('CHIEF FINANCIAL')) return 3500000
+    if (t.includes('COO') || t.includes('CHIEF OPERATING')) return 3000000
+    if (t.includes('CTO') || t.includes('CHIEF TECHNOLOGY')) return 2500000
+    if (t.includes('PRESIDENT')) return 2500000
+    if (t.includes('EVP') || t.includes('EXECUTIVE VICE')) return 2000000
+    if (t.includes('SVP') || t.includes('SENIOR VICE')) return 1500000
+    if (t.includes('VP') || t.includes('VICE PRESIDENT')) return 1000000
+    if (t.includes('DIRECTOR')) return 400000
+    if (t.includes('CHAIRMAN') || t.includes('CHAIR')) return 600000
+    return 500000
+  }
+
+  function getConvictionRatio(shares: number, price: number, title: string): string {
+    if (!shares || !price) return '—'
+    const val = shares * price
+    const salary = getEstimatedSalary(title)
+    if (!salary) return '—'
+    const ratio = val / salary
+    if (ratio >= 5) return ratio.toFixed(1) + 'x 🔥'
+    if (ratio >= 2) return ratio.toFixed(1) + 'x ⚡'
+    if (ratio >= 0.5) return ratio.toFixed(2) + 'x'
+    if (ratio >= 0.1) return ratio.toFixed(2) + 'x'
+    return '<0.1x'
+  }
+
   const scoreComponents = ranking ? [
     { label: 'Insider Conviction', desc: 'How significant were the purchases?', val: ranking.insider_conviction },
     { label: 'Leadership Alignment', desc: 'Did multiple senior executives buy?', val: ranking.leadership_alignment },
