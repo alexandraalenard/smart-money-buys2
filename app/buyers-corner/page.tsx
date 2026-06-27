@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 // Unusual activity data - in production this would be calculated from real-time trade volume vs 30-day average
 // Volume Surge = today's volume / 30-day avg volume (e.g. 3.2 = 320% of normal)
-const VOLUME_EXPLOSIONS = []
+const VOLUME_EXPLOSIONS: any[] = []
 
 function getSurgeColor(type: string, surge: number) {
   if (type === 'BUY_SURGE') return surge > 4 ? '#C9A84C' : surge > 2.5 ? '#DFC48B' : '#2D6A4F'
