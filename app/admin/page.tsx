@@ -20,7 +20,7 @@ export default function AdminPage() {
     setLoading(true)
     const { data: logs } = await supabase.from('cron_logs').select('*').order('ran_at',{ascending:false}).limit(10)
     if (logs) setCronLogs(logs)
-    const { data: t } = await supabase.from('trades').select('*, companies(ticker, name), insiders(name, title)').order('transaction_date',{ascending:false}).limit(20)
+    const { data: t } = await supabase.from('insider_transactions').select('*, companies(ticker, name), insiders(name, title)').order('transaction_date',{ascending:false}).limit(20)
     if (t) setTrades(t)
     setLoading(false)
   }

@@ -115,14 +115,14 @@ export async function GET(request) {
 
     for (const company of companies) {
       const { data: trades } = await supabase
-        .from('trades')
+        .from('insider_transactions')
         .select('*')
         .eq('company_id', company.id)
 
       const components = computeComponents(trades || [])
       const score = computeRawScore(components)
 
-      await supabase.from('rankings').upsert({
+      await supabase.from('confidence_score_breakdowns').upsert({
         company_id: company.id,
         ticker: company.ticker,
         score,

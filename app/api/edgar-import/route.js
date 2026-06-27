@@ -113,7 +113,7 @@ export async function GET(request) {
               insider = ni
             }
             if (!insider) continue
-            const { error: tErr } = await supabase.from('trades').upsert({
+            const { error: tErr } = await supabase.from('insider_transactions').upsert({
               company_id: company.id,
               insider_id: insider.id,
               insider_name: tx.insiderName,

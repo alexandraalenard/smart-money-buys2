@@ -54,7 +54,7 @@ export default function StockScreener() {
     setNotFound(null)
     try {
       const { data, error } = await supabase
-        .from('rankings')
+        .from('confidence_score_breakdowns')
         .select('*, companies (ticker, name, sector)')
         .eq('ticker', sym)
         .limit(1)

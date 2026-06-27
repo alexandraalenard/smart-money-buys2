@@ -59,10 +59,10 @@ export default function CompanyPage() {
     if (companyData) {
       setCompany(companyData)
       const { data: rankingData } = await supabase
-        .from('rankings').select('*').eq('ticker', ticker).single()
+        .from('confidence_score_breakdowns').select('*').eq('ticker', ticker).single()
       if (rankingData) setRanking(rankingData)
       const { data: tradesData } = await supabase
-        .from('trades')
+        .from('insider_transactions')
         .select('*, insiders(name, title)')
         .eq('company_id', companyData.id)
         .order('transaction_date', { ascending: false })

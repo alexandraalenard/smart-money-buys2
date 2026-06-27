@@ -30,7 +30,7 @@ export default function Home() {
 
   async function fetchRankings() {
     const { data } = await supabase
-      .from('rankings')
+      .from('confidence_score_breakdowns')
       .select('*, companies (ticker, name, sector)')
       .order('score', { ascending: false })
     if (data) setRankings(data)
