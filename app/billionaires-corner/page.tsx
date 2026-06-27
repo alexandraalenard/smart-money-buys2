@@ -108,4 +108,4 @@ export default function BillionairesCornerPage(){
     </section>
     </main>
     )
-}</div>
+}
