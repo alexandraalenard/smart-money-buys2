@@ -2,80 +2,7 @@ import Link from 'next/link'
 
 const TODAY = 'June 26, 2026'
 
-const NEWS_ITEMS = [
-  {
-    id:1, category:'TECH', impact:'HIGH', tickers:['NVDA','AMD','TSLA'],
-    headline:'Federal Reserve holds rates — tech sector rallies as growth stocks reprice',
-    summary:'The Federal Reserve held interest rates steady for the third consecutive meeting, signalling confidence in the inflation trajectory. Technology stocks surged as lower-for-longer rate expectations boosted growth stock valuations. NVDA led gains at +6.2%, with AMD and MSFT following.',
-    insiderSignal:'BUY',
-    insiderNote:'NVDA: 3 insider buys detected this week worth $12.4M combined. Conviction signal.',
-    tags:['Fed Decision','Growth Stocks','AI Sector'],
-    timeAgo:'2h ago'
-  },
-  {
-    id:2, category:'ENERGY', impact:'MEDIUM', tickers:['XOM','CVX','COP'],
-    headline:'OPEC+ announces surprise 500,000 bpd production cut — oil spikes to $91',
-    summary:'OPEC+ members agreed to an additional 500,000 barrel per day production cut effective August 1st. Brent crude surged 4.2% to $91.40 on the news. Energy majors Exxon, Chevron and ConocoPhillips all saw significant pre-market buying before the announcement was made public.',
-    insiderSignal:'BUY',
-    insiderNote:'COP: Carl Icahn disclosed $104M purchase of CVX shares 3 days before this announcement.',
-    tags:['OPEC+','Oil Price','Energy Sector'],
-    timeAgo:'4h ago'
-  },
-  {
-    id:3, category:'HEALTHCARE', impact:'HIGH', tickers:['PFE','MRK','ABBV'],
-    headline:'FDA rejects Pfizer Phase 3 trial — shares drop 8% pre-market',
-    summary:'The FDA issued a Complete Response Letter for Pfizer\'s lead oncology candidate, citing insufficient efficacy data in the primary endpoint. Pfizer shares fell 7.9% in pre-market trading. Rival Merck, which has competing programs, gained 3.1% on the news.',
-    insiderSignal:'SELL',
-    insiderNote:'PFE: 2 senior executives sold $8.7M in shares 6 days before this announcement. Flagged.',
-    tags:['FDA', 'Drug Approval', 'Oncology'],
-    timeAgo:'6h ago'
-  },
-  {
-    id:4, category:'FINANCIALS', impact:'MEDIUM', tickers:['JPM','BAC','GS'],
-    headline:'JPMorgan Q2 earnings beat — net interest income up 12% YoY',
-    summary:'JPMorgan Chase posted Q2 EPS of $4.87 vs $4.20 consensus estimate. Net interest income rose 12% year-over-year as the bank benefited from higher-for-longer rate environment. CEO Jamie Dimon warned of geopolitical risks but maintained full-year guidance.',
-    insiderSignal:'BUY',
-    insiderNote:'JPM: Multiple institutional block trades detected in first hour of trading. Accumulation pattern.',
-    tags:['Earnings','Q2 Results','Banking'],
-    timeAgo:'8h ago'
-  },
-  {
-    id:5, category:'CONSUMER', impact:'MEDIUM', tickers:['AMZN','WMT','COST'],
-    headline:'US consumer confidence hits 18-month high — retail sector outperforms',
-    summary:'The Conference Board Consumer Confidence Index rose to 108.7 in June, beating estimates of 104.2 and reaching its highest level since December 2024. Amazon, Walmart and Costco all saw strong buying activity as consumer discretionary and staples sectors outpaced the broader market.',
-    insiderSignal:'BUY',
-    insiderNote:'AMZN: George Soros 13F reveals $198M new position. Filed 2 weeks ago.',
-    tags:['Consumer Confidence','Retail','Economic Data'],
-    timeAgo:'10h ago'
-  },
-  {
-    id:6, category:'TECH', impact:'HIGH', tickers:['INTC','AMD'],
-    headline:'Intel loses major data centre contract to AMD — shares tumble 5%',
-    summary:'Intel confirmed it lost a significant multi-year data centre chip supply agreement to AMD, representing approximately $2.1B in annual revenue. The contract, with a major cloud provider, marks a continuation of Intel\'s market share erosion in the server CPU space. AMD shares rose 4.8% on the news.',
-    insiderSignal:'SELL',
-    insiderNote:'INTC: CEO reduced personal holdings by $3.2M last month. Leadership confidence question.',
-    tags:['Semiconductors','Market Share','Data Centre'],
-    timeAgo:'Yesterday'
-  },
-  {
-    id:7, category:'MACRO', impact:'HIGH', tickers:['SPY','QQQ','GLD'],
-    headline:'US CPI comes in at 2.9% — below forecast, dollar weakens',
-    summary:'June CPI inflation printed at 2.9% year-over-year, below the 3.1% consensus estimate. Core CPI ex-food and energy also softened to 3.1%. The data strengthened expectations for a September Fed rate cut. Gold surged 1.8% while the US dollar index fell 0.7%.',
-    insiderSignal:'NEUTRAL',
-    insiderNote:'Broad macro data. Watch defensive sectors and gold as rate cut bets increase.',
-    tags:['Inflation','CPI','Fed Rate Cut'],
-    timeAgo:'Yesterday'
-  },
-  {
-    id:8, category:'EV', impact:'MEDIUM', tickers:['TSLA','GM','F'],
-    headline:'Tesla Cybertruck recall expanded to 46,000 units — manufacturing defect',
-    summary:'Tesla issued an expanded recall of 46,000 Cybertruck units due to a windshield wiper motor defect. While manageable in scope, the recall raises ongoing questions about Tesla\'s manufacturing quality control. GM and Ford EV programs both gained on relative positioning.',
-    insiderSignal:'SELL',
-    insiderNote:'TSLA: Retail sell-off detected. However, Elon Musk bought $334M of shares this week — countervailing signal.',
-    tags:['Tesla','EV','Recall'],
-    timeAgo:'Yesterday'
-  },
-]
+const NEWS_ITEMS: any[] = []
 
 function getImpactColor(impact: string) {
   if (impact === 'HIGH') return '#c94c4c'
@@ -139,7 +66,8 @@ export default function MarketPulsePage() {
 
           {/* MAIN NEWS FEED */}
           <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
-            {NEWS_ITEMS.map(item => (
+            {NEWS_ITEMS.length === 0 && (<div style={{ color: '#9ca3af', fontFamily: 'Georgia, serif', fontStyle: 'italic', padding: '40px 0', textAlign: 'center' }}>Live market data is not connected yet — check back soon.</div>)}
+              {NEWS_ITEMS.map(item => (
               <div key={item.id} style={{background:'#1B4332',border:'1px solid #2D6A4F',borderRadius:'10px',padding:'28px',position:'relative',overflow:'hidden'}}>
                 <div style={{position:'absolute',top:0,left:0,right:0,height:'2px',background:item.insiderSignal==='BUY'?'linear-gradient(90deg, #C9A84C, #DFC48B)':item.insiderSignal==='SELL'?'linear-gradient(90deg, #c94c4c, #F87171)':'linear-gradient(90deg, #2D6A4F, #1B4332)'}} />
 
