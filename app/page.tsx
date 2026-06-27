@@ -212,7 +212,7 @@ export default function Home() {
                         <span style={{ fontSize: '15px', color: '#DFC48B' }}>{company.name}</span>
                         <span style={{ background: '#2D6A4F', border: '1px solid #C9A84C', borderRadius: '100px', padding: '2px 10px', fontSize: '10px', color: '#C9A84C', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{company.sector}</span>
                       </div>
-                      <div style={{ fontSize: '13px', color: '#DFC48B', fontStyle: 'italic' }}>{r.ai_summary || 'Multiple insider purchases detected. Institutional interest increasing.'}</div>
+                      <div style={{ fontSize: '13px', color: '#DFC48B', fontStyle: 'italic' }}>{r.ai_summary || 'Ranked on recent SEC Form 4 insider filing activity.'}</div>
                       <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
                         {[
                           { label: 'Insider', val: r.insider_conviction },
