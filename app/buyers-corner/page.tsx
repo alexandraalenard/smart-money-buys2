@@ -2,18 +2,7 @@ import Link from 'next/link'
 
 // Unusual activity data - in production this would be calculated from real-time trade volume vs 30-day average
 // Volume Surge = today's volume / 30-day avg volume (e.g. 3.2 = 320% of normal)
-const VOLUME_EXPLOSIONS = [
-  { ticker:'NVDA', name:'NVIDIA Corporation', sector:'Technology', type:'BUY_SURGE', surge:4.8, avgVol:'45M', todayVol:'216M', priceChg:'+6.2%', notes:'Institutional accumulation detected. Volume 4.8x normal following earnings beat signal.' },
-  { ticker:'META', name:'Meta Platforms', sector:'Technology', type:'BUY_SURGE', surge:3.1, avgVol:'18M', todayVol:'56M', priceChg:'+3.8%', notes:'Call option flow spiked before volume surge. Potential pre-announcement positioning.' },
-  { ticker:'XOM', name:'Exxon Mobil', sector:'Energy', type:'BUY_SURGE', surge:2.9, avgVol:'22M', todayVol:'64M', priceChg:'+2.1%', notes:'Energy sector rotation. Multiple large block trades detected at market open.' },
-  { ticker:'JPM', name:'JPMorgan Chase', sector:'Financials', type:'BUY_SURGE', surge:2.6, avgVol:'12M', todayVol:'31M', priceChg:'+1.9%', notes:'Financials outperform on rate decision day. Heavy institutional buying in first hour.' },
-  { ticker:'LLY', name:'Eli Lilly', sector:'Healthcare', type:'BUY_SURGE', surge:2.4, avgVol:'4M', todayVol:'10M', priceChg:'+4.1%', notes:'Drug approval catalyst rumours. Biotech funds adding to positions.' },
-  { ticker:'TSLA', name:'Tesla Inc', sector:'Consumer Discretionary', type:'SELL_OFF', surge:3.7, avgVol:'95M', todayVol:'351M', priceChg:'-5.3%', notes:'Mass sell-off following production miss report. Retail panic selling amplified by margin calls.' },
-  { ticker:'INTC', name:'Intel Corporation', sector:'Technology', type:'SELL_OFF', surge:3.2, avgVol:'35M', todayVol:'112M', priceChg:'-4.7%', notes:'CEO departure rumours. Institutional funds reducing exposure after guidance cut.' },
-  { ticker:'PFE', name:'Pfizer Inc', sector:'Healthcare', type:'SELL_OFF', surge:2.8, avgVol:'28M', todayVol:'78M', priceChg:'-3.1%', notes:'Pipeline failure on Phase 3 trial. Analysts downgrading en masse.' },
-  { ticker:'GM', name:'General Motors', sector:'Consumer Discretionary', type:'BUY_SURGE', surge:2.3, avgVol:'8M', todayVol:'18M', priceChg:'+1.4%', notes:'EV program news and quarterly beat. Short squeeze component detected.' },
-  { ticker:'BAC', name:'Bank of America', sector:'Financials', type:'SELL_OFF', surge:2.2, avgVol:'40M', todayVol:'88M', priceChg:'-2.8%', notes:'Credit quality concerns. Large institutional block sold at market open.' },
-]
+const VOLUME_EXPLOSIONS = []
 
 function getSurgeColor(type: string, surge: number) {
   if (type === 'BUY_SURGE') return surge > 4 ? '#C9A84C' : surge > 2.5 ? '#DFC48B' : '#2D6A4F'
@@ -75,6 +64,7 @@ export default function BuyersCornerPage() {
               <div style={{fontSize:'11px',color:'#2D6A4F'}}>abnormally high buying</div>
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+              {buys.length === 0 && (<div style={{ color: '#9ca3af', fontFamily: 'Georgia, serif', fontStyle: 'italic', padding: '32px 0', textAlign: 'center', gridColumn: '1 / -1' }}>No unusual-volume data connected yet — this needs a live market-data feed.</div>)}
               {buys.map(stock => (
                 <Link href={'/company/' + stock.ticker} key={stock.ticker} style={{textDecoration:'none'}}>
                   <div style={{background:getSurgeBg(stock.type),border:'1px solid ' + getSurgeBorder(stock.type),borderRadius:'10px',padding:'20px 24px',cursor:'pointer',position:'relative',overflow:'hidden'}}>
@@ -121,6 +111,7 @@ export default function BuyersCornerPage() {
               <div style={{fontSize:'11px',color:'#2D6A4F'}}>abnormally high selling</div>
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+              {sells.length === 0 && (<div style={{ color: '#9ca3af', fontFamily: 'Georgia, serif', fontStyle: 'italic', padding: '32px 0', textAlign: 'center', gridColumn: '1 / -1' }}>No unusual-volume data connected yet — this needs a live market-data feed.</div>)}
               {sells.map(stock => (
                 <Link href={'/company/' + stock.ticker} key={stock.ticker} style={{textDecoration:'none'}}>
                   <div style={{background:getSurgeBg(stock.type),border:'1px solid ' + getSurgeBorder(stock.type),borderRadius:'10px',padding:'20px 24px',cursor:'pointer',position:'relative',overflow:'hidden'}}>
