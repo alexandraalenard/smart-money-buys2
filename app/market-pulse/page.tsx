@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 const TODAY = 'June 26, 2026'
 
-const NEWS_ITEMS: any[] = []
+const NEWS_ITEMS: { tickers: any[]; tags: any[]; [key: string]: any }[] = []
 
 function getImpactColor(impact: string) {
   if (impact === 'HIGH') return '#c94c4c'
