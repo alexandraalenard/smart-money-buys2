@@ -60,10 +60,10 @@ export default function Home() {
   })
 
   const stats = [
-    { value: '2,847', label: 'Trades Tracked' },
-    { value: '$4.2B', label: 'Value Monitored' },
-    { value: '94%', label: 'Filing Coverage' },
-    { value: '+22.4%', label: 'Avg Return Following Signal' },
+    { value: String(rankings.length || 0), label: 'Companies Tracked' },
+    { value: String(rankings.filter(r => r.score >= 50).length), label: 'Active Signals (50+)' },
+    { value: 'SEC EDGAR', label: 'Data Source' },
+    { value: 'Form 4', label: 'Filing Type' },
   ]
 
   return (
@@ -113,18 +113,18 @@ export default function Home() {
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #C9A84C, #DFC48B)' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
               <div>
-                <div style={{ fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '6px', fontWeight: 600 }}>Latest Signal</div>
-                <div style={{ fontFamily: 'monospace', fontSize: '22px', fontWeight: 700, color: '#F7F4EF' }}>NVDA · BUY</div>
-                <div style={{ fontSize: '13px', color: '#DFC48B', marginTop: '4px' }}>Nancy Pelosi · House · CA-11</div>
+                <div style={{ fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '6px', fontWeight: 600 }}>Top Signal</div>
+                <div style={{ fontFamily: 'monospace', fontSize: '22px', fontWeight: 700, color: '#F7F4EF' }}>{rankings[0]?.ticker || '—'}</div>
+                <div style={{ fontSize: '13px', color: '#DFC48B', marginTop: '4px' }}>{rankings[0]?.companies?.name || 'Loading…'}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '4px' }}>AI Score</div>
-                <div style={{ fontSize: '36px', fontWeight: 800, color: '#C9A84C', lineHeight: 1 }}>91</div>
+                <div style={{ fontSize: '36px', fontWeight: 800, color: '#C9A84C', lineHeight: 1 }}>{rankings[0]?.score ?? '—'}</div>
                 <div style={{ fontSize: '11px', color: '#DFC48B' }}>/ 100</div>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-              {[['Value', '$500K-$1M'], ['Filed', '2024-01-17'], ['Gain Since', '+31.4%']].map(([label, val]) => (
+              {[['AI Score', rankings[0] ? rankings[0].score + '/100' : '—'], ['Sector', rankings[0]?.companies?.sector || '—'], ['Rank', '#1']].map(([label, val]) => (
                 <div key={label} style={{ background: '#2D6A4F', borderRadius: '8px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '10px', color: '#C9A84C', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '4px' }}>{label}</div>
                   <div style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 600, color: '#F7F4EF' }}>{val}</div>
