@@ -24,7 +24,7 @@ const NEWS_ITEMS = [
   {
     id:3, category:'HEALTHCARE', impact:'HIGH', tickers:['PFE','MRK','ABBV'],
     headline:'FDA rejects Pfizer Phase 3 trial — shares drop 8% pre-market',
-    summary:'The FDA issued a Complete Response Letter for Pfizer's lead oncology candidate, citing insufficient efficacy data in the primary endpoint. Pfizer shares fell 7.9% in pre-market trading. Rival Merck, which has competing programs, gained 3.1% on the news.',
+    summary:'The FDA issued a Complete Response Letter for Pfizer\'s lead oncology candidate, citing insufficient efficacy data in the primary endpoint. Pfizer shares fell 7.9% in pre-market trading. Rival Merck, which has competing programs, gained 3.1% on the news.',
     insiderSignal:'SELL',
     insiderNote:'PFE: 2 senior executives sold $8.7M in shares 6 days before this announcement. Flagged.',
     tags:['FDA', 'Drug Approval', 'Oncology'],
@@ -51,7 +51,7 @@ const NEWS_ITEMS = [
   {
     id:6, category:'TECH', impact:'HIGH', tickers:['INTC','AMD'],
     headline:'Intel loses major data centre contract to AMD — shares tumble 5%',
-    summary:'Intel confirmed it lost a significant multi-year data centre chip supply agreement to AMD, representing approximately $2.1B in annual revenue. The contract, with a major cloud provider, marks a continuation of Intel's market share erosion in the server CPU space. AMD shares rose 4.8% on the news.',
+    summary:'Intel confirmed it lost a significant multi-year data centre chip supply agreement to AMD, representing approximately $2.1B in annual revenue. The contract, with a major cloud provider, marks a continuation of Intel\'s market share erosion in the server CPU space. AMD shares rose 4.8% on the news.',
     insiderSignal:'SELL',
     insiderNote:'INTC: CEO reduced personal holdings by $3.2M last month. Leadership confidence question.',
     tags:['Semiconductors','Market Share','Data Centre'],
@@ -69,7 +69,7 @@ const NEWS_ITEMS = [
   {
     id:8, category:'EV', impact:'MEDIUM', tickers:['TSLA','GM','F'],
     headline:'Tesla Cybertruck recall expanded to 46,000 units — manufacturing defect',
-    summary:'Tesla issued an expanded recall of 46,000 Cybertruck units due to a windshield wiper motor defect. While manageable in scope, the recall raises ongoing questions about Tesla's manufacturing quality control. GM and Ford EV programs both gained on relative positioning.',
+    summary:'Tesla issued an expanded recall of 46,000 Cybertruck units due to a windshield wiper motor defect. While manageable in scope, the recall raises ongoing questions about Tesla\'s manufacturing quality control. GM and Ford EV programs both gained on relative positioning.',
     insiderSignal:'SELL',
     insiderNote:'TSLA: Retail sell-off detected. However, Elon Musk bought $334M of shares this week — countervailing signal.',
     tags:['Tesla','EV','Recall'],
