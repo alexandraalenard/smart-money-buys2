@@ -144,11 +144,19 @@ export default function CompanyPage() {
     { label: 'AI Opportunity Rating', desc: 'Overall AI assessment', val: ranking.ai_opportunity },
   ] : []
 
-  const aiReasons = ranking?.ai_reasons || [
+  const aiReasons = (ranking?.ai_reasons && ranking.ai_reasons.length) ? ranking.ai_reasons : ((ranking?.score || 0) >= 70 ? [
     'Significant insider purchases detected',
     'No insider selling in previous 12 months',
     'Pattern historically associated with outperformance',
-  ]
+  ] : (ranking?.score || 0) >= 50 ? [
+    'Mixed insider activity worth monitoring',
+    'Some notable transactions on record',
+    'Watch for follow-through buying',
+  ] : [
+    'Recent filings are mostly sales or share grants',
+    'No significant open-market buying detected',
+    'Limited insider conviction at this time',
+  ])
 
   if (loading) return (
     <main style={{ background: '#07130E', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -207,9 +215,9 @@ export default function CompanyPage() {
           {ranking && (
             <div style={{ background: '#1B4332', border: '1px solid #2D6A4F', borderRadius: '10px', padding: '28px', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: '#C9A84C' }} />
-              <div style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '12px', fontWeight: 600 }}>Why this ranked highly</div>
+              <div style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '12px', fontWeight: 600 }}>{(ranking.score || 0) >= 50 ? 'Why this ranked highly' : 'Insider activity analysis'}</div>
               <p style={{ fontFamily: 'Georgia, serif', fontSize: '17px', lineHeight: 1.8, color: '#F7F4EF', fontStyle: 'italic', marginBottom: '20px' }}>
-                {ranking.ai_summary || 'Multiple senior insiders have made significant purchases, signalling strong confidence in the company outlook.'}
+                {ranking.ai_summary || ((ranking.score || 0) >= 70 ? 'Multiple senior insiders have made significant purchases, signalling strong confidence in the company outlook.' : (ranking.score || 0) >= 50 ? 'Insiders show mixed but notable activity worth monitoring.' : 'Recent insider filings are mostly routine sales or share grants, with limited open-market buying.')}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {aiReasons.map((r, i) => (
