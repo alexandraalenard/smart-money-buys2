@@ -3,11 +3,10 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import Link from 'next/link'
 
-const ADMIN_PW = 'ledger2026'
-
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
   const [pw, setPw] = useState('')
+  const [authError, setAuthError] = useState('')
   const [cronLogs, setCronLogs] = useState<any[]>([])
   const [trades, setTrades] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -15,6 +14,21 @@ export default function AdminPage() {
   const [scoreMsg, setScoreMsg] = useState('')
 
   useEffect(() => { if (authed) loadData() }, [authed])
+
+  async function attemptLogin() {
+    try {
+      const r = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      })
+      const d = await r.json()
+      if (r.ok && d.ok) { setAuthError(''); setAuthed(true) }
+      else { setPw(''); setAuthError(d.error || 'Incorrect password') }
+    } catch {
+      setPw(''); setAuthError('Login failed — please try again')
+    }
+  }
 
   async function loadData() {
     setLoading(true)
@@ -55,8 +69,9 @@ export default function AdminPage() {
         <div style={{fontSize:'32px',marginBottom:'16px'}}>📒</div>
         <h1 style={{fontFamily:'Georgia, serif',fontSize:'24px',color:'#F7F4EF',marginBottom:'8px'}}>Admin Access</h1>
         <p style={{color:'#DFC48B',fontSize:'14px',marginBottom:'32px'}}>The Hidden Ledger internal dashboard</p>
-        <input type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&(pw===ADMIN_PW?setAuthed(true):setPw(''))} style={{width:'100%',background:'#07130E',border:'1px solid #2D6A4F',borderRadius:'6px',padding:'12px 16px',color:'#F7F4EF',fontSize:'14px',outline:'none',marginBottom:'12px',boxSizing:'border-box'}} />
-        <button onClick={()=>pw===ADMIN_PW?setAuthed(true):setPw('')} style={{width:'100%',background:'#C9A84C',color:'#07130E',border:'none',padding:'12px',borderRadius:'6px',fontSize:'14px',fontWeight:700,cursor:'pointer'}}>Enter</button>
+        <input type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') attemptLogin() }} style={{width:'100%',background:'#07130E',border:'1px solid #2D6A4F',borderRadius:'6px',padding:'12px 16px',color:'#F7F4EF',fontSize:'14px',outline:'none',marginBottom:'12px',boxSizing:'border-box'}} />
+        {authError && <div style={{color:'#c94c4c',fontSize:'12px',marginBottom:'12px'}}>{authError}</div>}
+        <button onClick={attemptLogin} style={{width:'100%',background:'#C9A84C',color:'#07130E',border:'none',padding:'12px',borderRadius:'6px',fontSize:'14px',fontWeight:700,cursor:'pointer'}}>Enter</button>
       </div>
     </main>
   )
