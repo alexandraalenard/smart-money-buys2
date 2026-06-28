@@ -8,7 +8,7 @@ const supabase = createClient(
 
 export default async function SellAlertsPage() {
   const { data: sells } = await supabase
-    .from('trades')
+    .from('insider_transactions')
     .select('*, companies(ticker, name, sector), insiders(name, title)')
     .in('transaction_type', ['S', 'SELL', 's', 'sell'])
     .order('transaction_date', { ascending: false })
