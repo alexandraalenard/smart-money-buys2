@@ -8,7 +8,7 @@ const supabase = createClient(
 export async function GET() {
   try {
     const { data, error } = await supabase
-      .from('rankings')
+      .from('confidence_score_breakdowns')
       .select(`
         score,
         ticker,
