@@ -1,25 +1,106 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { supabase } from '../../lib/supabase'
 
-const TODAY = 'June 26, 2026'
-
-const NEWS_ITEMS: { tickers: any[]; tags: any[]; [key: string]: any }[] = []
-
-function getImpactColor(impact: string) {
-  if (impact === 'HIGH') return '#c94c4c'
-  if (impact === 'MEDIUM') return '#C9A84C'
-  return '#2D6A4F'
+interface Article {
+  id: string
+  headline: string
+  summary: string | null
+  source: string | null       // source domain, e.g. "reuters.com"
+  url: string | null
+  published_at: string | null
+  tickers: string[]
 }
 
-function getCategoryColor(cat: string) {
-  const map: Record<string, string> = {
-    'TECH':'#C9A84C','ENERGY':'#DFC48B','HEALTHCARE':'#F87171',
-    'FINANCIALS':'#2D6A4F','CONSUMER':'#DFC48B','MACRO':'#9CA3AF',
-    'EV':'#C9A84C'
-  }
-  return map[cat] || '#DFC48B'
+function fmtDate(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const secs = Math.floor((Date.now() - d.getTime()) / 1000)
+  if (secs < 60) return 'just now'
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
 }
 
 export default function MarketPulsePage() {
+  const [articles, setArticles] = useState<Article[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        // 1. Most recent real headlines we've ingested from GDELT.
+        const { data: news, error: nErr } = await supabase
+          .from('news_articles')
+          .select('id, headline, summary, source, url, published_at')
+          .order('published_at', { ascending: false, nullsFirst: false })
+          .limit(120)
+        if (nErr) throw nErr
+
+        const rows = news ?? []
+        const ids = rows.map((r) => r.id)
+
+        // 2. Which tickers each article was tagged to.
+        const tickersByArticle: Record<string, string[]> = {}
+        if (ids.length > 0) {
+          const { data: impacts, error: iErr } = await supabase
+            .from('article_stock_impacts')
+            .select('article_id, ticker')
+            .in('article_id', ids)
+          if (iErr) throw iErr
+          for (const imp of impacts ?? []) {
+            if (!imp.article_id || !imp.ticker) continue
+            ;(tickersByArticle[imp.article_id] ||= []).push(imp.ticker)
+          }
+        }
+
+        if (cancelled) return
+        setArticles(
+          rows.map((r) => ({
+            id: r.id,
+            headline: r.headline,
+            summary: r.summary ?? null,
+            source: r.source ?? null,
+            url: r.url ?? null,
+            published_at: r.published_at ?? null,
+            tickers: Array.from(new Set(tickersByArticle[r.id] || [])).sort(),
+          }))
+        )
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load market news')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const latestDate = articles.length ? fmtDate(articles[0].published_at) : null
+
+  // Descriptive only: how many recent stories mention each tracked ticker.
+  const topTickers = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const a of articles) for (const t of a.tickers) counts[t] = (counts[t] || 0) + 1
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 12)
+  }, [articles])
+
   return (
     <main style={{background:'#07130E',minHeight:'100vh',fontFamily:"'Inter', sans-serif",color:'#F7F4EF'}}>
       <nav style={{background:'#1B4332',borderBottom:'1px solid #2D6A4F',padding:'0 48px',height:'64px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100}}>
@@ -44,19 +125,20 @@ export default function MarketPulsePage() {
         <div style={{maxWidth:'1280px',margin:'0 auto',display:'grid',gridTemplateColumns:'1fr auto',alignItems:'end',gap:'32px'}}>
           <div>
             <div style={{display:'inline-block',background:'#2D6A4F',border:'1px solid #C9A84C',borderRadius:'100px',padding:'4px 16px',marginBottom:'20px',fontSize:'11px',letterSpacing:'0.12em',textTransform:'uppercase',color:'#C9A84C',fontWeight:600}}>
-              AI Daily Digest
+              Live News · GDELT
             </div>
             <h1 style={{fontFamily:'Georgia, serif',fontSize:'48px',fontWeight:700,color:'#F7F4EF',marginBottom:'16px',lineHeight:1.1}}>
               Market Pulse
             </h1>
-            <p style={{color:'#DFC48B',fontSize:'16px',maxWidth:'560px',lineHeight:1.7,margin:0}}>
-              Every news event that could move the top 500 stocks — with insider buy and sell signals called out. Updated daily.
+            <p style={{color:'#DFC48B',fontSize:'16px',maxWidth:'620px',lineHeight:1.7,margin:0}}>
+              Recent news coverage of the companies we track, matched by name and tagged to their tickers.
+              Headlines and links come straight from the publishers via the GDELT open news index — click through to read the original.
             </p>
           </div>
           <div style={{textAlign:'right'}}>
-            <div style={{fontSize:'11px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#C9A84C',marginBottom:'4px'}}>Last Updated</div>
-            <div style={{fontFamily:'monospace',fontSize:'16px',color:'#F7F4EF',fontWeight:700}}>{TODAY}</div>
-            <div style={{fontSize:'12px',color:'#2D6A4F',marginTop:'4px'}}>6:00 AM UTC · Next update in 18h</div>
+            <div style={{fontSize:'11px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#C9A84C',marginBottom:'4px'}}>Latest Headline</div>
+            <div style={{fontFamily:'monospace',fontSize:'16px',color:'#F7F4EF',fontWeight:700}}>{latestDate || '—'}</div>
+            <div style={{fontSize:'12px',color:'#2D6A4F',marginTop:'4px'}}>{articles.length} stories loaded</div>
           </div>
         </div>
       </section>
@@ -66,40 +148,58 @@ export default function MarketPulsePage() {
 
           {/* MAIN NEWS FEED */}
           <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
-            {NEWS_ITEMS.length === 0 && (<div style={{ color: '#9ca3af', fontFamily: 'Georgia, serif', fontStyle: 'italic', padding: '40px 0', textAlign: 'center' }}>Live market data is not connected yet — check back soon.</div>)}
-              {NEWS_ITEMS.map(item => (
+            {loading && (
+              <div style={{color:'#9ca3af',fontFamily:'Georgia, serif',fontStyle:'italic',padding:'40px 0',textAlign:'center'}}>Loading news…</div>
+            )}
+
+            {!loading && error && (
+              <div style={{padding:'24px',borderRadius:'10px',border:'1px solid rgba(201,168,76,0.2)',background:'#1B4332',color:'#DFC48B'}}>
+                Could not load market news: {error}
+              </div>
+            )}
+
+            {!loading && !error && articles.length === 0 && (
+              <div style={{color:'#9ca3af',fontFamily:'Georgia, serif',fontStyle:'italic',padding:'56px 24px',textAlign:'center',border:'1px solid #2D6A4F',borderRadius:'10px',background:'#1B4332',lineHeight:1.7}}>
+                No news has been ingested yet. Run the ingestion job (<span style={{fontFamily:'monospace',fontStyle:'normal',color:'#C9A84C'}}>/api/ingest-news</span>) to pull recent GDELT coverage for the tracked companies.
+              </div>
+            )}
+
+            {!loading && !error && articles.map((item) => (
               <div key={item.id} style={{background:'#1B4332',border:'1px solid #2D6A4F',borderRadius:'10px',padding:'28px',position:'relative',overflow:'hidden'}}>
-                <div style={{position:'absolute',top:0,left:0,right:0,height:'2px',background:item.insiderSignal==='BUY'?'linear-gradient(90deg, #C9A84C, #DFC48B)':item.insiderSignal==='SELL'?'linear-gradient(90deg, #c94c4c, #F87171)':'linear-gradient(90deg, #2D6A4F, #1B4332)'}} />
+                <div style={{position:'absolute',top:0,left:0,right:0,height:'2px',background:'linear-gradient(90deg, #2D6A4F, #1B4332)'}} />
 
                 <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'12px',gap:'16px'}}>
                   <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
-                    <span style={{background:'#07130E',border:'1px solid ' + getCategoryColor(item.category),borderRadius:'100px',padding:'3px 10px',fontSize:'10px',fontWeight:700,letterSpacing:'0.1em',color:getCategoryColor(item.category)}}>{item.category}</span>
-                    <span style={{background:'#07130E',border:'1px solid ' + getImpactColor(item.impact),borderRadius:'100px',padding:'3px 10px',fontSize:'10px',fontWeight:700,letterSpacing:'0.1em',color:getImpactColor(item.impact)}}>{item.impact} IMPACT</span>
-                    {item.tickers.map(t=>(
+                    {item.tickers.map(t => (
                       <Link key={t} href={'/company/'+t} style={{fontFamily:'monospace',fontSize:'11px',fontWeight:700,color:'#C9A84C',background:'#2D6A4F',padding:'2px 8px',borderRadius:'4px',textDecoration:'none'}}>{t}</Link>
                     ))}
+                    {item.source && (
+                      <span style={{fontSize:'11px',color:'#DFC48B',letterSpacing:'0.04em'}}>{item.source}</span>
+                    )}
                   </div>
-                  <div style={{fontSize:'11px',color:'#2D6A4F',whiteSpace:'nowrap'}}>{item.timeAgo}</div>
+                  <div style={{fontSize:'11px',color:'#2D6A4F',whiteSpace:'nowrap'}}>{timeAgo(item.published_at)}</div>
                 </div>
 
-                <h3 style={{fontFamily:'Georgia, serif',fontSize:'18px',fontWeight:700,color:'#F7F4EF',marginBottom:'10px',lineHeight:1.3}}>{item.headline}</h3>
-                <p style={{fontSize:'14px',color:'#DFC48B',lineHeight:1.7,marginBottom:'16px'}}>{item.summary}</p>
+                {item.url ? (
+                  <a href={item.url} target="_blank" rel="noopener noreferrer" style={{textDecoration:'none'}}>
+                    <h3 style={{fontFamily:'Georgia, serif',fontSize:'18px',fontWeight:700,color:'#F7F4EF',marginBottom:'10px',lineHeight:1.3}}>{item.headline}</h3>
+                  </a>
+                ) : (
+                  <h3 style={{fontFamily:'Georgia, serif',fontSize:'18px',fontWeight:700,color:'#F7F4EF',marginBottom:'10px',lineHeight:1.3}}>{item.headline}</h3>
+                )}
 
-                {/* INSIDER SIGNAL BOX */}
-                <div style={{background:'#07130E',border:'1px solid ' + (item.insiderSignal==='BUY'?'rgba(201,168,76,0.3)':item.insiderSignal==='SELL'?'rgba(220,38,38,0.3)':'rgba(45,106,79,0.3)'),borderRadius:'6px',padding:'12px 16px',display:'flex',gap:'12px',alignItems:'flex-start'}}>
-                  <span style={{fontSize:'16px',marginTop:'1px'}}>{item.insiderSignal==='BUY'?'📈':item.insiderSignal==='SELL'?'📉':'➡️'}</span>
-                  <div>
-                    <div style={{fontSize:'10px',letterSpacing:'0.1em',textTransform:'uppercase',color:item.insiderSignal==='BUY'?'#C9A84C':item.insiderSignal==='SELL'?'#F87171':'#2D6A4F',fontWeight:700,marginBottom:'4px'}}>
-                      Insider Signal: {item.insiderSignal}
-                    </div>
-                    <div style={{fontSize:'13px',color:'#DFC48B'}}>{item.insiderNote}</div>
+                {item.summary && (
+                  <div style={{background:'#07130E',border:'1px solid rgba(201,168,76,0.25)',borderRadius:'6px',padding:'12px 16px',marginBottom:'12px'}}>
+                    <div style={{fontSize:'10px',letterSpacing:'0.1em',textTransform:'uppercase',color:'#C9A84C',fontWeight:700,marginBottom:'6px'}}>AI Summary</div>
+                    <p style={{fontSize:'13px',color:'#DFC48B',lineHeight:1.6,margin:0}}>{item.summary}</p>
                   </div>
-                </div>
+                )}
 
-                <div style={{display:'flex',gap:'8px',marginTop:'14px',flexWrap:'wrap'}}>
-                  {item.tags.map(tag=>(
-                    <span key={tag} style={{background:'#2D6A4F',color:'#DFC48B',padding:'3px 10px',borderRadius:'100px',fontSize:'11px'}}>{tag}</span>
-                  ))}
+                <div style={{display:'flex',alignItems:'center',gap:'14px',flexWrap:'wrap'}}>
+                  <span style={{fontSize:'12px',color:'#2D6A4F'}}>{fmtDate(item.published_at)}</span>
+                  {item.url && (
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" style={{fontSize:'12px',color:'#C9A84C',textDecoration:'none',fontWeight:600}}>Read original ↗</a>
+                  )}
                 </div>
               </div>
             ))}
@@ -108,29 +208,24 @@ export default function MarketPulsePage() {
           {/* SIDEBAR */}
           <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
             <div style={{background:'#1B4332',border:'1px solid #2D6A4F',borderRadius:'10px',padding:'24px',position:'sticky',top:'80px'}}>
-              <div style={{fontSize:'11px',letterSpacing:'0.12em',textTransform:'uppercase',color:'#C9A84C',marginBottom:'16px',fontWeight:600}}>Today&apos;s Insider Signals</div>
-              {NEWS_ITEMS.filter(n=>n.insiderSignal!=='NEUTRAL').map(item=>(
-                <div key={item.id} style={{display:'flex',gap:'10px',alignItems:'flex-start',padding:'10px 0',borderBottom:'1px solid #2D6A4F'}}>
-                  <span style={{fontSize:'14px'}}>{item.insiderSignal==='BUY'?'🟢':'🔴'}</span>
-                  <div style={{flex:1}}>
-                    <div style={{display:'flex',gap:'6px',marginBottom:'3px'}}>
-                      {item.tickers.slice(0,2).map(t=>(
-                        <span key={t} style={{fontFamily:'monospace',fontSize:'12px',fontWeight:700,color:'#F7F4EF'}}>{t}</span>
-                      ))}
-                    </div>
-                    <div style={{fontSize:'11px',color:'#DFC48B',lineHeight:1.4}}>{item.insiderNote.substring(0,80)}...</div>
-                  </div>
-                </div>
+              <div style={{fontSize:'11px',letterSpacing:'0.12em',textTransform:'uppercase',color:'#C9A84C',marginBottom:'16px',fontWeight:600}}>Most-Mentioned Tickers</div>
+              {topTickers.length === 0 && (
+                <div style={{fontSize:'13px',color:'#DFC48B',lineHeight:1.6}}>No coverage loaded yet.</div>
+              )}
+              {topTickers.map(([ticker, count]) => (
+                <Link key={ticker} href={'/company/'+ticker} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #2D6A4F',textDecoration:'none'}}>
+                  <span style={{fontFamily:'monospace',fontSize:'13px',fontWeight:700,color:'#F7F4EF'}}>{ticker}</span>
+                  <span style={{fontFamily:'monospace',fontSize:'12px',color:'#C9A84C'}}>{count} {count === 1 ? 'story' : 'stories'}</span>
+                </Link>
               ))}
 
               <div style={{marginTop:'20px',paddingTop:'16px',borderTop:'1px solid #2D6A4F'}}>
-                <div style={{fontSize:'11px',letterSpacing:'0.12em',textTransform:'uppercase',color:'#C9A84C',marginBottom:'12px',fontWeight:600}}>High Impact Today</div>
-                {NEWS_ITEMS.filter(n=>n.impact==='HIGH').map(item=>(
-                  <div key={item.id} style={{padding:'8px 0',borderBottom:'1px solid #07130E'}}>
-                    <div style={{fontSize:'12px',fontWeight:600,color:'#F7F4EF',marginBottom:'2px',lineHeight:1.3}}>{item.headline.substring(0,55)}...</div>
-                    <div style={{fontSize:'10px',color:'#2D6A4F'}}>{item.category} · {item.timeAgo}</div>
-                  </div>
-                ))}
+                <div style={{fontSize:'11px',letterSpacing:'0.12em',textTransform:'uppercase',color:'#C9A84C',marginBottom:'8px',fontWeight:600}}>About This Feed</div>
+                <p style={{fontSize:'12px',color:'#DFC48B',lineHeight:1.7,margin:0}}>
+                  Coverage is discovered via the{' '}
+                  <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer" style={{color:'#C9A84C',textDecoration:'none'}}>GDELT Project</a>{' '}
+                  open news index. Articles are matched to a company by name, so an occasional headline may be tangential. Nothing here is a price forecast.
+                </p>
               </div>
             </div>
           </div>
@@ -140,7 +235,7 @@ export default function MarketPulsePage() {
       <footer style={{padding:'32px 48px',borderTop:'1px solid #1B4332'}}>
         <div style={{maxWidth:'1280px',margin:'0 auto'}}>
           <p style={{fontSize:'11px',color:'#2D6A4F',lineHeight:1.7,margin:0}}>
-            Market Pulse summaries are AI-generated for informational purposes only. News items are illustrative examples of the type of content this feature will provide when integrated with live news APIs. Insider trade references are based on publicly available SEC filings. Nothing on this page constitutes financial advice or an investment recommendation. The Hidden Ledger accepts no liability for any investment decisions made based on this content. All data publicly available. Not financial advice. 2026 The Hidden Ledger.
+            News discovery powered by the GDELT Project (gdeltproject.org). Headlines, links, and publication details belong to their original publishers; follow each link to read the full article at its source. This page reproduces headlines and metadata only and makes no prediction about any stock&apos;s future price. Not financial advice. © 2026 The Hidden Ledger.
           </p>
         </div>
       </footer>
