@@ -92,7 +92,7 @@ export default function StockScreener() {
       try {
         const [compRes, scoreRes, txs] = await Promise.all([
           supabase.from('companies').select('id, ticker, name, sector'),
-          supabase.from('confidence_score_breakdowns').select('company_id, score, ai_summary'),
+         supabase.from('rankings').select('company_id, score, ai_summary'),
           fetchAllTransactions(),
         ])
         if (compRes.error) throw compRes.error
