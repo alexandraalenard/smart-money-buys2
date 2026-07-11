@@ -88,9 +88,9 @@ function gdeltUrl(query, maxrecords, timespan) {
 // Single instrumented request. NEVER throws — it returns a structured result
 // describing exactly what happened (transport error, HTTP status, or parsed
 // body) so failures are diagnosable instead of a bare "fetch failed".
-async function rawFetch(url, ua) {
+async function rawFetch(url, ua, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   const headers = { Accept: 'application/json' }
   if (ua) headers['User-Agent'] = ua
   try {
@@ -152,24 +152,22 @@ export async function GET(request) {
     const timespan = url.searchParams.get('timespan') || '3d'
 
     // --- DIAGNOSTIC PROBE ------------------------------------------------
-    // /api/ingest-news?probe=1 makes a single GDELT request (no DB writes)
-    // under three User-Agent variants and reports exactly what came back:
-    // transport error + cause, or HTTP status + body. This tells us WHY the
-    // live fetch fails instead of guessing.
+    // /api/ingest-news?probe=1 makes ONE GDELT request (no DB writes, no retry)
+    // with a short 5s timeout and returns the raw result immediately, so it
+    // always answers within Vercel's function limit instead of timing out.
+    // Answers the only question that matters: is GDELT reachable from Vercel?
     if (url.searchParams.get('probe')) {
       const probeUrl = gdeltUrl('"Apple Inc"', 3, timespan)
-      const variants = [
-        { label: 'custom-ua', ua: UA },
-        { label: 'browser-ua', ua: 'Mozilla/5.0 (compatible; TheHiddenLedger/1.0)' },
-        { label: 'no-ua', ua: null },
-      ]
-      const attempts = []
-      for (let i = 0; i < variants.length; i++) {
-        if (i > 0) await sleep(GDELT_GAP_MS)
-        const r = await rawFetch(probeUrl, variants[i].ua)
-        attempts.push({ variant: variants[i].label, ...r, rawText: undefined })
-      }
-      return NextResponse.json({ probe: true, url: probeUrl, runtime: 'nodejs', attempts })
+      const r = await rawFetch(probeUrl, UA, 5000)
+      return NextResponse.json({
+        probe: true,
+        url: probeUrl,
+        transportOk: r.transportOk,
+        status: r.status ?? null,
+        errorCode: r.error?.causeCode ?? r.error?.name ?? null,
+        errorMessage: r.error?.causeMessage ?? r.error?.message ?? null,
+        bodySnippet: r.bodySnippet ?? null,
+      })
     }
 
     const { data: companies, error: cErr } = await supabase
