@@ -6,6 +6,7 @@ import Link from 'next/link'
 interface Ranking {
   id: string
   ticker: string
+  company_id: string
   score: number
   insider_conviction: number
   leadership_alignment: number
@@ -29,11 +30,40 @@ export default function Home() {
   useEffect(() => { fetchRankings() }, [])
 
   async function fetchRankings() {
-    const { data } = await supabase
-      .from('confidence_score_breakdowns')
-      .select('*, companies (ticker, name, sector)')
+    // 1. Pull the real scored companies from the `rankings` table
+    //    (this is where the live scores actually live).
+    const { data: rankingRows } = await supabase
+      .from('rankings')
+      .select('id, ticker, company_id, score, insider_conviction, leadership_alignment, historical_edge, capital_commitment, ai_opportunity, ai_summary')
+      .not('score', 'is', null)
       .order('score', { ascending: false })
-    if (data) setRankings(data)
+
+    const rows = rankingRows || []
+
+    // 2. Look up company names and sectors for those rankings.
+    const companyIds = rows.map((r) => r.company_id).filter(Boolean)
+    let companyById: Record<string, { name: string; sector: string }> = {}
+
+    if (companyIds.length > 0) {
+      const { data: companyRows } = await supabase
+        .from('companies')
+        .select('id, name, sector')
+        .in('id', companyIds)
+
+      companyById = Object.fromEntries(
+        (companyRows || []).map((c) => [c.id, { name: c.name, sector: c.sector }])
+      )
+    }
+
+    // 3. Attach a `companies` object to each ranking so the UI can read
+    //    r.companies.name / r.companies.sector. Falls back to the ticker
+    //    if a company record isn't found.
+    const merged = rows.map((r) => ({
+      ...r,
+      companies: companyById[r.company_id] || { name: r.ticker, sector: '' },
+    })) as Ranking[]
+
+    setRankings(merged)
     setLoading(false)
   }
 
