@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import dns from 'node:dns'
+
+// GDELT's api host is IPv4-only. Node's fetch (undici) can hang/timeout on the
+// TCP connect when it doesn't prefer IPv4; force IPv4-first resolution. Low-risk
+// mitigation for the observed UND_ERR_CONNECT_TIMEOUT. If the ?probe below shows
+// the connect still fails on the server, the cause is upstream (blocked/dropped
+// SYNs), not DNS — and we switch news sources rather than fabricate anything.
+try { dns.setDefaultResultOrder('ipv4first') } catch { /* older node */ }
 
 // Market Pulse ingestion.
 //
@@ -17,6 +25,7 @@ import { createClient } from '@supabase/supabase-js'
 //     (mirrors the /api/edgar-import pattern).
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const supabase = createClient(
@@ -107,8 +116,15 @@ async function rawFetch(url, ua) {
 }
 
 // Fetch + parse for the ingestion loop. Returns { articles, notice, diag }.
+// Retries once on a transport-level failure (connect timeouts to GDELT are
+// intermittent — a second attempt frequently succeeds).
 async function fetchGdelt(query, maxrecords, timespan, ua) {
-  const r = await rawFetch(gdeltUrl(query, maxrecords, timespan), ua)
+  const url = gdeltUrl(query, maxrecords, timespan)
+  let r = await rawFetch(url, ua)
+  if (!r.transportOk) {
+    await sleep(1500)
+    r = await rawFetch(url, ua)
+  }
   if (!r.transportOk) {
     return { articles: [], notice: 'transport error', diag: r.error }
   }
