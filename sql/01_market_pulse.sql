@@ -1,45 +1,57 @@
 -- =============================================================================
--- Feature 1 — MARKET PULSE (GDELT news)
+-- Feature 1 — MARKET PULSE (GDELT news)  +  post-key-fix RLS read policies
 -- Run this in the Supabase SQL Editor.
 --
--- The `news_articles` and `article_stock_impacts` tables ALREADY EXIST (from the
--- earlier 11-table migration) and already have public read access. This script
--- only adds the WRITE access the ingestion route needs.
+-- CONTEXT: the swapped Supabase keys have been fixed, so the server ingestion
+-- route (/api/ingest-news) now runs as a TRUE service_role and bypasses RLS on
+-- writes. Tables therefore need only PUBLIC READ so the browser (true anon key)
+-- can display their contents — no public write policy is required.
 --
--- WHY WRITE POLICIES ARE NEEDED HERE:
---   The env keys are currently swapped — SUPABASE_SERVICE_ROLE_KEY holds an
---   ANON-role JWT — so the server route writes as the anon role and RLS blocks
---   it. Rather than change your live keys (which affects the whole site), these
---   two policies let the ingestion route insert/tag news on these two tables
---   only. This is a private personal-use tool, so scoped public write here is an
---   acceptable trade-off. (If you later fix the key swap so the route truly runs
---   as service_role, service_role bypasses RLS and you can drop these two write
---   policies.)
+-- Now that the browser uses the real anon key, every RLS-enabled table the
+-- client reads needs a public read policy. These four are read by client pages
+-- and were previously only readable because the anon slot secretly held the
+-- service_role key:
+--   * news_articles          -> Market Pulse feed
+--   * article_stock_impacts  -> Market Pulse ticker tags
+--   * billionaire_profiles   -> Billionaires Corner page
+--   * cron_logs              -> Admin dashboard
+-- (companies / rankings / insider_transactions / insiders were verified to read
+--  fine under the true anon key already, so they are intentionally untouched.)
+--
+-- This script also DROPS the public-write policies from the earlier version of
+-- this file, in case they were ever applied — writes go through service_role
+-- now and should not be left open to the anon key.
 --
 -- Idempotent: safe to run more than once.
 -- =============================================================================
 
--- Make sure RLS is on (no-op if already enabled).
+-- Ensure RLS is on (no-op if already enabled).
 alter table news_articles          enable row level security;
 alter table article_stock_impacts  enable row level security;
+alter table billionaire_profiles   enable row level security;
+alter table cron_logs              enable row level security;
 
--- Public READ (idempotent re-create; matches the project convention).
+-- ---------------------------------------------------------------------------
+-- PUBLIC READ (idempotent re-create; matches the project convention).
+-- ---------------------------------------------------------------------------
 drop policy if exists "Allow public read" on news_articles;
 create policy "Allow public read" on news_articles          for select to public using (true);
 
 drop policy if exists "Allow public read" on article_stock_impacts;
 create policy "Allow public read" on article_stock_impacts  for select to public using (true);
 
--- WRITE access for the ingestion route (insert new articles, update summaries,
--- and upsert ticker tags).
+drop policy if exists "Allow public read" on billionaire_profiles;
+create policy "Allow public read" on billionaire_profiles   for select to public using (true);
+
+drop policy if exists "Allow public read" on cron_logs;
+create policy "Allow public read" on cron_logs              for select to public using (true);
+
+-- ---------------------------------------------------------------------------
+-- CLEANUP — drop the public WRITE policies from the previous version of this
+-- file. Writes now go through service_role (which bypasses RLS), so these are
+-- no longer needed and should not be left open. Safe if they never existed.
+-- ---------------------------------------------------------------------------
 drop policy if exists "Allow public insert" on news_articles;
-create policy "Allow public insert" on news_articles          for insert to public with check (true);
-
 drop policy if exists "Allow public update" on news_articles;
-create policy "Allow public update" on news_articles          for update to public using (true) with check (true);
-
 drop policy if exists "Allow public insert" on article_stock_impacts;
-create policy "Allow public insert" on article_stock_impacts  for insert to public with check (true);
-
 drop policy if exists "Allow public update" on article_stock_impacts;
-create policy "Allow public update" on article_stock_impacts  for update to public using (true) with check (true);

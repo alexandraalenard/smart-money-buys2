@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import dns from 'node:dns'
+
+// GDELT's api host is IPv4-only. Node's fetch (undici) can hang/timeout on the
+// TCP connect when it doesn't prefer IPv4; force IPv4-first resolution. Low-risk
+// mitigation for the observed UND_ERR_CONNECT_TIMEOUT. If the ?probe below shows
+// the connect still fails on the server, the cause is upstream (blocked/dropped
+// SYNs), not DNS — and we switch news sources rather than fabricate anything.
+try { dns.setDefaultResultOrder('ipv4first') } catch { /* older node */ }
 
 // Market Pulse ingestion.
 //
@@ -17,6 +25,7 @@ import { createClient } from '@supabase/supabase-js'
 //     (mirrors the /api/edgar-import pattern).
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const supabase = createClient(
@@ -29,6 +38,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // GDELT throttles free callers to ~1 request / 5s. Give it a margin.
 const GDELT_GAP_MS = 6000
+const FETCH_TIMEOUT_MS = 15000
+
+// undici's top-level Error is a useless "fetch failed" — the real reason (DNS,
+// connection reset, TLS, blocked IP) lives on err.cause. Unwrap it so callers
+// can actually see WHY a request failed instead of guessing.
+function describeError(err) {
+  const c = err && err.cause ? err.cause : null
+  return {
+    name: err?.name || null,
+    message: err?.message || String(err),
+    causeCode: c?.code || null,
+    causeMessage: c?.message || null,
+    causeErrno: c?.errno ?? null,
+    causeSyscall: c?.syscall || null,
+  }
+}
 
 // Turn a stored company name into a precise GDELT phrase query. We quote the
 // full legal name (e.g. "NVIDIA Corporation") so we favour precision over
@@ -48,8 +73,8 @@ function parseSeenDate(s) {
   return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`
 }
 
-async function fetchGdelt(query, maxrecords, timespan) {
-  const url =
+function gdeltUrl(query, maxrecords, timespan) {
+  return (
     'https://api.gdeltproject.org/api/v2/doc/doc' +
     '?query=' + encodeURIComponent(query) +
     '&mode=artlist' +
@@ -57,21 +82,64 @@ async function fetchGdelt(query, maxrecords, timespan) {
     '&format=json' +
     '&timespan=' + encodeURIComponent(timespan) +
     '&sort=datedesc'
+  )
+}
 
-  const res = await fetch(url, { headers: { 'User-Agent': UA } })
-  const text = await res.text()
+// Single instrumented request. NEVER throws — it returns a structured result
+// describing exactly what happened (transport error, HTTP status, or parsed
+// body) so failures are diagnosable instead of a bare "fetch failed".
+async function rawFetch(url, ua, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const headers = { Accept: 'application/json' }
+  if (ua) headers['User-Agent'] = ua
+  try {
+    const res = await fetch(url, { headers, redirect: 'follow', signal: controller.signal })
+    const text = await res.text()
+    const trimmed = (text || '').trim()
+    const isJson = trimmed[0] === '{'
+    return {
+      transportOk: true,
+      status: res.status,
+      statusText: res.statusText,
+      contentType: res.headers.get('content-type'),
+      bodyLength: text.length,
+      bodySnippet: trimmed.slice(0, 300),
+      isJson,
+      rawText: text,
+    }
+  } catch (err) {
+    return { transportOk: false, error: describeError(err) }
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
-  // GDELT returns a plain-text notice (not JSON) when it rate-limits or errors.
-  // Detect that instead of blindly JSON.parse-ing.
-  const trimmed = text.trim()
-  if (!trimmed || trimmed[0] !== '{') {
-    return { articles: [], notice: trimmed.slice(0, 200) }
+// Fetch + parse for the ingestion loop. Returns { articles, notice, diag }.
+// Retries once on a transport-level failure (connect timeouts to GDELT are
+// intermittent — a second attempt frequently succeeds).
+async function fetchGdelt(query, maxrecords, timespan, ua) {
+  const url = gdeltUrl(query, maxrecords, timespan)
+  let r = await rawFetch(url, ua)
+  if (!r.transportOk) {
+    await sleep(1500)
+    r = await rawFetch(url, ua)
+  }
+  if (!r.transportOk) {
+    return { articles: [], notice: 'transport error', diag: r.error }
+  }
+  if (r.status !== 200) {
+    return { articles: [], notice: `HTTP ${r.status}`, diag: { status: r.status, body: r.bodySnippet } }
+  }
+  if (!r.isJson) {
+    // GDELT returns a plain-text notice (rate limit / bad query) as HTTP 200.
+    return { articles: [], notice: r.bodySnippet }
   }
   try {
-    const json = JSON.parse(trimmed)
+    const json = JSON.parse(r.rawText)
     return { articles: Array.isArray(json.articles) ? json.articles : [] }
   } catch {
-    return { articles: [], notice: 'unparseable GDELT response' }
+    return { articles: [], notice: 'unparseable GDELT response', diag: { body: r.bodySnippet } }
   }
 }
 
@@ -82,6 +150,25 @@ export async function GET(request) {
     const limit = parseInt(url.searchParams.get('limit') || '6', 10)
     const maxrecords = parseInt(url.searchParams.get('maxrecords') || '25', 10)
     const timespan = url.searchParams.get('timespan') || '3d'
+
+    // --- DIAGNOSTIC PROBE ------------------------------------------------
+    // /api/ingest-news?probe=1 makes ONE GDELT request (no DB writes, no retry)
+    // with a short 5s timeout and returns the raw result immediately, so it
+    // always answers within Vercel's function limit instead of timing out.
+    // Answers the only question that matters: is GDELT reachable from Vercel?
+    if (url.searchParams.get('probe')) {
+      const probeUrl = gdeltUrl('"Apple Inc"', 3, timespan)
+      const r = await rawFetch(probeUrl, UA, 5000)
+      return NextResponse.json({
+        probe: true,
+        url: probeUrl,
+        transportOk: r.transportOk,
+        status: r.status ?? null,
+        errorCode: r.error?.causeCode ?? r.error?.name ?? null,
+        errorMessage: r.error?.causeMessage ?? r.error?.message ?? null,
+        bodySnippet: r.bodySnippet ?? null,
+      })
+    }
 
     const { data: companies, error: cErr } = await supabase
       .from('companies')
@@ -109,15 +196,14 @@ export async function GET(request) {
       // Space out GDELT requests (no sleep before the very first one).
       if (i > 0) await sleep(GDELT_GAP_MS)
 
-      let gdelt
-      try {
-        gdelt = await fetchGdelt(query, maxrecords, timespan)
-      } catch (e) {
-        results.push({ ticker: company.ticker, error: e.message })
-        continue
-      }
+      const gdelt = await fetchGdelt(query, maxrecords, timespan, UA)
       if (gdelt.notice) {
-        results.push({ ticker: company.ticker, gdeltNotice: gdelt.notice, articles: 0 })
+        results.push({
+          ticker: company.ticker,
+          gdeltNotice: gdelt.notice,
+          diag: gdelt.diag || undefined,
+          articles: 0,
+        })
         continue
       }
 
