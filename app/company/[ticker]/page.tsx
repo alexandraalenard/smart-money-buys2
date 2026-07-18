@@ -38,6 +38,35 @@ interface Ranking {
   updated_at: string
 }
 
+interface EvidenceData {
+  evidence_density: string
+  news: {
+    article_count: number
+    distinct_outlets: number
+    latest_published_at: string | null
+    articles: { headline: string; source: string | null; url: string | null; published_at: string | null; summary: string | null }[]
+  }
+  insider: {
+    form4_count: number
+    distinct_insiders: number
+    purchase_count: number
+    sale_count: number
+    award_count: number
+    exercise_count: number
+    purchase_value: number
+    sale_value: number
+  }
+}
+
+interface Argument { point: string; source: string }
+interface BullBear {
+  available: boolean
+  reason?: string
+  bull: Argument[]
+  bear: Argument[]
+  evidence_note?: string | null
+}
+
 export default function CompanyPage() {
   const params = useParams()
   const ticker = (params?.ticker as string)?.toUpperCase()
@@ -45,9 +74,13 @@ export default function CompanyPage() {
   const [ranking, setRanking] = useState<Ranking | null>(null)
   const [trades, setTrades] = useState<Trade[]>([])
   const [loading, setLoading] = useState(true)
+  const [evidence, setEvidence] = useState<EvidenceData | null>(null)
+  const [bullbear, setBullbear] = useState<BullBear | null>(null)
+  const [bbLoading, setBbLoading] = useState(true)
 
   useEffect(() => {
     if (ticker) fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker])
 
   async function fetchData() {
@@ -68,6 +101,19 @@ export default function CompanyPage() {
         .order('transaction_date', { ascending: false })
         .limit(20)
       if (tradesData) setTrades(tradesData)
+
+      // Evidence panel (server route — counts real records)
+      fetch(`/api/evidence?ticker=${ticker}`)
+        .then((r) => r.json())
+        .then((d) => { if (d && !d.error) setEvidence(d) })
+        .catch(() => {})
+
+      // Bull / Bear (server route — AI, grounded in this stock's sources)
+      fetch(`/api/bull-bear?ticker=${ticker}`)
+        .then((r) => r.json())
+        .then((d) => setBullbear(d))
+        .catch(() => setBullbear({ available: false, reason: 'Could not reach analysis service', bull: [], bear: [] }))
+        .finally(() => setBbLoading(false))
     }
     setLoading(false)
   }
@@ -81,6 +127,13 @@ export default function CompanyPage() {
   function fmtVal(shares: number, price: number) {
     if (!shares || !price) return 'N/A'
     const v = shares * price
+    if (v >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M'
+    if (v >= 1000) return '$' + (v / 1000).toFixed(0) + 'K'
+    return '$' + v.toLocaleString()
+  }
+
+  function usd(v: number) {
+    if (!v) return '$0'
     if (v >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M'
     if (v >= 1000) return '$' + (v / 1000).toFixed(0) + 'K'
     return '$' + v.toLocaleString()
@@ -100,10 +153,17 @@ export default function CompanyPage() {
     return t === 'P' || t === 'BUY' || t === 'A' || t === 'M'
   }
 
-  function fmtDate(d: string) {
+  function fmtDate(d: string | null) {
     if (!d) return 'N/A'
     try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
     catch { return d }
+  }
+
+  function densityColor(dsty: string) {
+    if (dsty === 'Substantial') return '#C9A84C'
+    if (dsty === 'Moderate') return '#DFC48B'
+    if (dsty === 'Thin') return '#8fae9c'
+    return '#2D6A4F'
   }
 
   const scoreComponents = ranking ? [
@@ -196,6 +256,117 @@ export default function CompanyPage() {
             </div>
           )}
 
+          {/* ============ EVIDENCE PANEL ============ */}
+          {evidence && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A84C', fontWeight: 600 }}>The Evidence</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', color: '#DFC48B' }}>Evidence density:</span>
+                  <span style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: densityColor(evidence.evidence_density), border: '1px solid ' + densityColor(evidence.evidence_density), borderRadius: '100px', padding: '2px 12px' }}>{evidence.evidence_density}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+                {[
+                  { label: 'Outlets covering', val: String(evidence.news.distinct_outlets), sub: `${evidence.news.article_count} articles` },
+                  { label: 'Insider purchases', val: String(evidence.insider.purchase_count), sub: usd(evidence.insider.purchase_value), buy: true },
+                  { label: 'Insider sales', val: String(evidence.insider.sale_count), sub: usd(evidence.insider.sale_value), sell: true },
+                  { label: 'Awards / exercises', val: String(evidence.insider.award_count + evidence.insider.exercise_count), sub: 'not purchases' },
+                ].map((t: any) => (
+                  <div key={t.label} style={{ background: '#1B4332', border: '1px solid #2D6A4F', borderRadius: '8px', padding: '14px 16px' }}>
+                    <div style={{ fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '6px' }}>{t.label}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '24px', fontWeight: 800, color: t.buy ? '#C9A84C' : t.sell ? '#c98a4c' : '#F7F4EF', lineHeight: 1 }}>{t.val}</div>
+                    <div style={{ fontSize: '11px', color: '#DFC48B', marginTop: '4px' }}>{t.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              <p style={{ fontSize: '12px', color: '#2D6A4F', lineHeight: 1.6, marginBottom: '20px', fontStyle: 'italic' }}>
+                &ldquo;Evidence density&rdquo; describes how much documented material exists right now — it is not a rating of the stock or a prediction. Many outlets covering one story is broad coverage, not independent confirmation. Awards and option exercises are compensation, not insiders buying with their own money.
+              </p>
+
+              {evidence.news.articles.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {evidence.news.articles.slice(0, 8).map((a, i) => (
+                    <div key={i} style={{ background: '#1B4332', border: '1px solid #2D6A4F', borderRadius: '8px', padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '11px', color: '#DFC48B' }}>{a.source || 'Unknown source'}</span>
+                        <span style={{ fontSize: '11px', color: '#2D6A4F', whiteSpace: 'nowrap' }}>{fmtDate(a.published_at)}</span>
+                      </div>
+                      {a.url ? (
+                        <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                          <div style={{ fontFamily: 'Georgia, serif', fontSize: '15px', color: '#F7F4EF', lineHeight: 1.4 }}>{a.headline}</div>
+                        </a>
+                      ) : (
+                        <div style={{ fontFamily: 'Georgia, serif', fontSize: '15px', color: '#F7F4EF', lineHeight: 1.4 }}>{a.headline}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ============ BULL / BEAR ============ */}
+          <div>
+            <div style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '8px', fontWeight: 600 }}>Bull case vs Bear case</div>
+            <p style={{ fontSize: '12px', color: '#2D6A4F', lineHeight: 1.6, marginBottom: '16px', fontStyle: 'italic' }}>
+              Arguments drawn only from the news and filings above — each tied to its source. These are the cases people could make, not predictions and not advice.
+            </p>
+
+            {bbLoading && (
+              <div style={{ background: '#1B4332', border: '1px solid #2D6A4F', borderRadius: '10px', padding: '32px', textAlign: 'center', color: '#DFC48B', fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>Weighing the arguments…</div>
+            )}
+
+            {!bbLoading && bullbear && bullbear.available === false && (
+              <div style={{ background: '#1B4332', border: '1px solid #2D6A4F', borderRadius: '10px', padding: '24px', color: '#DFC48B', fontSize: '14px', lineHeight: 1.6 }}>
+                The bull/bear analysis isn&apos;t available right now{bullbear.reason ? ` (${bullbear.reason})` : ''}. Nothing is being made up in its place.
+              </div>
+            )}
+
+            {!bbLoading && bullbear && bullbear.available !== false && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ background: '#12241b', border: '1px solid #2D6A4F', borderRadius: '10px', padding: '20px' }}>
+                    <div style={{ fontSize: '12px', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#C9A84C', fontWeight: 700, marginBottom: '14px' }}>▲ Bull case</div>
+                    {bullbear.bull && bullbear.bull.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {bullbear.bull.map((a, i) => (
+                          <div key={i}>
+                            <div style={{ fontSize: '14px', color: '#F7F4EF', lineHeight: 1.5 }}>{a.point}</div>
+                            {a.source && <div style={{ fontSize: '11px', color: '#8fae9c', marginTop: '4px', fontStyle: 'italic' }}>Source: {a.source}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '13px', color: '#DFC48B', fontStyle: 'italic' }}>The sources don&apos;t support a bull case right now.</div>
+                    )}
+                  </div>
+
+                  <div style={{ background: '#241515', border: '1px solid #5c3030', borderRadius: '10px', padding: '20px' }}>
+                    <div style={{ fontSize: '12px', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#e08a8a', fontWeight: 700, marginBottom: '14px' }}>▼ Bear case</div>
+                    {bullbear.bear && bullbear.bear.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {bullbear.bear.map((a, i) => (
+                          <div key={i}>
+                            <div style={{ fontSize: '14px', color: '#F7F4EF', lineHeight: 1.5 }}>{a.point}</div>
+                            {a.source && <div style={{ fontSize: '11px', color: '#c98f8f', marginTop: '4px', fontStyle: 'italic' }}>Source: {a.source}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '13px', color: '#DFC48B', fontStyle: 'italic' }}>The sources don&apos;t support a bear case right now.</div>
+                    )}
+                  </div>
+                </div>
+                {bullbear.evidence_note && (
+                  <p style={{ fontSize: '12px', color: '#2D6A4F', lineHeight: 1.6, marginTop: '14px' }}>{bullbear.evidence_note}</p>
+                )}
+              </>
+            )}
+          </div>
+
           {ranking && scoreComponents.length > 0 && (
             <div>
               <div style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '20px', fontWeight: 600 }}>Score Breakdown</div>
@@ -256,8 +427,8 @@ export default function CompanyPage() {
             <div style={{ fontSize: '11px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A84C', marginBottom: '16px', fontWeight: 600 }}>Data Sources</div>
             {[
               { icon: '📄', label: 'SEC Form 4', desc: 'Live insider trading disclosures', source: '*' },
+              { icon: '📰', label: 'Finnhub company news', desc: 'Recent headlines per ticker', source: '***' },
               { icon: '🏛️', label: 'Congressional Disclosures', desc: 'Political trades and holdings', source: '**' },
-              { icon: '📑', label: '13F Filings', desc: 'Quarterly institutional holdings', source: '*' },
             ].map(({ icon, label, desc, source }) => (
               <div key={label} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid #2D6A4F' }}>
                 <span style={{ fontSize: '18px' }}>{icon}</span>
@@ -289,7 +460,7 @@ export default function CompanyPage() {
 
           <div style={{ background: '#07130E', border: '1px solid #1B4332', borderRadius: '8px', padding: '16px' }}>
             <div style={{ fontSize: '11px', color: '#2D6A4F', lineHeight: 1.6 }}>
-              * SEC Form 4, sec.gov · ** House/Senate financial disclosures · All data publicly available · Not financial advice.
+              * SEC Form 4, sec.gov · ** House/Senate financial disclosures · *** Finnhub company news · All data publicly available · Not financial advice.
             </div>
           </div>
         </div>
